@@ -112,3 +112,28 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# IDE
+.vscode/
+
+# Docker
+docker-compose.override.yml
+
+# Nginx certificates
+nginx/certs/
+
+# Temporary files
+*.tmp
+
+# Additional environment files
+.env.local
+.env.production
+
+# Logs
+logs/
