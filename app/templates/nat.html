@@ -1,0 +1,1110 @@
+{% extends "base.html" %}
+{% block title %}NAT Rules — NGFW Manager{% endblock %}
+
+{% block body %}
+<div class="app-layout">
+
+    {# ====================== SIDEBAR ====================== #}
+    <aside class="app-sidebar">
+        <div class="sidebar-brand">
+            <div style="width:32px;height:32px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-right:10px;flex-shrink:0">
+                <i class="fas fa-shield-halved" style="color:#fff;font-size:15px"></i>
+            </div>
+            <div>
+                <div class="sidebar-brand-text">NGFW Manager</div>
+                <span class="sidebar-brand-sub">NAT Editor</span>
+            </div>
+        </div>
+
+        {# Nav tabs #}
+        <div style="display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.06)">
+            <a href="/" style="flex:1;text-align:center;padding:5px 4px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;background:rgba(255,255,255,.06);color:#94a3b8;transition:.15s"
+               onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+                <i class="fas fa-layer-group me-1" style="font-size:10px"></i>Security
+            </a>
+            <a href="/nat" style="flex:1;text-align:center;padding:5px 4px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;background:rgba(59,130,246,.25);color:#60a5fa;transition:.15s">
+                <i class="fas fa-arrows-left-right me-1" style="font-size:10px"></i>NAT
+            </a>
+            <a href="/objects" style="flex:1;text-align:center;padding:5px 4px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;background:rgba(255,255,255,.06);color:#94a3b8;transition:.15s"
+               onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+                <i class="fas fa-cubes me-1" style="font-size:10px"></i>Objects
+            </a>
+        </div>
+
+        <div class="sidebar-scroll">
+            {% if tree %}
+            <div class="sidebar-section-label">Devices</div>
+            {% for gid, data in tree.items() %}
+            <div class="sidebar-device">
+                <div class="sidebar-device-header {{ 'open' if gid == current_device_id else '' }}"
+                     onclick="toggleDevice(this, '{{ gid }}')">
+                    <i class="fas fa-network-wired" style="color:#3b82f6;font-size:12px;flex-shrink:0"></i>
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ data.name }}</span>
+                    <i class="fas fa-chevron-right chevron"></i>
+                </div>
+                <div class="sidebar-folders {{ 'open' if gid == current_device_id else '' }}" id="dev_{{ gid }}">
+
+                    {% if data.sections.pre %}
+                    <div style="padding:4px 0 2px 8px"><span class="section-badge pre">PRE</span></div>
+                    {% for f in data.sections.pre %}
+                    <a href="/nat?folder_id={{ f.id }}"
+                       class="folder-link {{ 'active' if f.id|string == selected_folder_id|string else '' }}">
+                        <i class="fas fa-folder{{ '-open' if f.id|string == selected_folder_id|string else '' }}" style="font-size:11px;flex-shrink:0"></i>
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ f.name }}">{{ f.name }}</span>
+                        <span class="folder-count">{{ f.rules_count }}</span>
+                    </a>
+                    {% endfor %}
+                    {% endif %}
+
+                    {% if data.sections.default %}
+                    <div style="padding:6px 0 2px 8px;margin-top:4px"><span class="section-badge default">DEFAULT</span></div>
+                    {% for f in data.sections.default %}
+                    <a href="/nat?folder_id={{ f.id }}"
+                       class="folder-link {{ 'active' if f.id|string == selected_folder_id|string else '' }}">
+                        <i class="fas fa-folder{{ '-open' if f.id|string == selected_folder_id|string else '' }}" style="font-size:11px;flex-shrink:0"></i>
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ f.name }}">{{ f.name }}</span>
+                        <span class="folder-count">{{ f.rules_count }}</span>
+                    </a>
+                    {% endfor %}
+                    {% endif %}
+
+                    {% if data.sections.post %}
+                    <div style="padding:6px 0 2px 8px;margin-top:4px"><span class="section-badge post">POST</span></div>
+                    {% for f in data.sections.post %}
+                    <a href="/nat?folder_id={{ f.id }}"
+                       class="folder-link {{ 'active' if f.id|string == selected_folder_id|string else '' }}">
+                        <i class="fas fa-folder{{ '-open' if f.id|string == selected_folder_id|string else '' }}" style="font-size:11px;flex-shrink:0"></i>
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ f.name }}">{{ f.name }}</span>
+                        <span class="folder-count">{{ f.rules_count }}</span>
+                    </a>
+                    {% endfor %}
+                    {% endif %}
+
+                    <button onclick="openCreateFolder('{{ gid }}')"
+                            style="display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;padding:5px 10px;color:#475569;font-size:11px;cursor:pointer;border-radius:5px;margin-top:4px;transition:.15s"
+                            onmouseover="this.style.background='rgba(255,255,255,.06)'"
+                            onmouseout="this.style.background='none'">
+                        <i class="fas fa-plus" style="font-size:10px"></i> Add Folder
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div style="padding:24px 16px;text-align:center;color:#475569;font-size:12px">
+                <i class="fas fa-rotate" style="font-size:24px;opacity:.3;display:block;margin-bottom:8px"></i>
+                No devices synced yet.<br>Click Sync to load.
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="sidebar-footer">
+            <div style="width:30px;height:30px;background:#1e293b;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <i class="fas fa-user" style="color:#64748b;font-size:12px"></i>
+            </div>
+            <div class="sidebar-user">
+                <div class="sidebar-user-name">{{ user.username }}</div>
+                <div class="sidebar-user-host">{{ user.host }}</div>
+            </div>
+            <a href="/logout" title="Logout"
+               style="color:#475569;text-decoration:none;padding:4px 6px;border-radius:6px;transition:.15s"
+               onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#475569'">
+                <i class="fas fa-power-off"></i>
+            </a>
+        </div>
+    </aside>
+
+    {# ====================== MAIN ========================= #}
+    <div class="app-main">
+
+        <div class="app-topbar">
+            <span class="topbar-title">
+                <i class="fas fa-arrows-left-right" style="color:#3b82f6;margin-right:6px"></i>
+                NAT Policy
+            </span>
+            <div class="topbar-sep"></div>
+            <button class="btn-top" onclick="doSync()" title="Pull configuration from device">
+                <i class="fas fa-rotate"></i> Sync
+            </button>
+            <button class="btn-top success" onclick="doNatDeploy()" title="Apply NAT folder order to NGFW">
+                <i class="fas fa-upload"></i> Deploy
+            </button>
+            <div class="topbar-sep"></div>
+            <a href="/" class="btn-top" style="text-decoration:none">
+                <i class="fas fa-layer-group"></i> Security Rules
+            </a>
+            <a href="/objects" class="btn-top" style="text-decoration:none">
+                <i class="fas fa-cubes"></i> Objects
+            </a>
+            <input type="hidden" id="current_device_id" value="{{ current_device_id }}">
+        </div>
+
+        <div class="app-content">
+
+            {% if not dashboard_data %}
+            <div class="empty-state">
+                <i class="fas fa-arrows-left-right d-block"></i>
+                <div style="font-size:15px;font-weight:700;margin-bottom:6px">No folder selected</div>
+                <div style="font-size:13px">Select a NAT folder in the sidebar or click <b>Sync</b> to load rules.</div>
+            </div>
+            {% endif %}
+
+            {% for item in dashboard_data %}
+            <div class="folder-card">
+                <div class="folder-card-header">
+                    <input type="checkbox" class="form-check-input" id="chk_folder_{{ item.folder.id }}"
+                           onchange="toggleFolderCheck(this, '{{ item.folder.id }}')">
+                    <div class="folder-card-title">
+                        <i class="fas fa-folder-open" style="color:#3b82f6"></i>
+                        {{ item.folder.name }}
+                        <span class="section-badge {{ item.folder.section }}">{{ item.folder.section|upper }}</span>
+                        <span style="font-weight:400;color:#94a3b8;font-size:11px">{{ item.rules|length }} rules</span>
+                    </div>
+                    <button class="btn-top" style="margin-left:auto;padding:4px 10px"
+                            onclick="openCreateNat('{{ item.folder.id }}', '{{ current_device_id }}')">
+                        <i class="fas fa-plus"></i> Rule
+                    </button>
+                </div>
+
+                <div class="table-scroll">
+                <table class="rules-table">
+                    <thead>
+                        <tr>
+                            <th style="width:28px"></th>
+                            <th style="width:24px"></th>
+                            <th style="width:32px">#</th>
+                            <th style="min-width:160px;width:18%">Name</th>
+                            <th style="min-width:80px;width:9%">Src Zone</th>
+                            <th style="min-width:110px;width:12%">Source</th>
+                            <th style="min-width:80px;width:9%">Dst Zone</th>
+                            <th style="min-width:110px;width:12%">Destination</th>
+                            <th style="min-width:90px;width:9%">Service</th>
+                            <th style="min-width:90px;width:9%">SNAT</th>
+                            <th style="min-width:90px;width:9%">DNAT</th>
+                            <th style="width:44px;text-align:center">On</th>
+                        </tr>
+                    </thead>
+                    <tbody class="sortable-rules" data-folder-id="{{ item.folder.id }}">
+                        {% for r in item.rules %}
+                        <tr data-id="{{ r.id }}" ondblclick="openEditNat({{ r | tojson | safe }})"
+                            {% if r.is_modified %}style="background:#fffbeb;border-left:3px solid #f59e0b"{% endif %}>
+                            <td style="padding-left:10px">
+                                <i class="fas fa-grip-vertical drag-handle"></i>
+                            </td>
+                            <td>
+                                <input type="checkbox" class="form-check-input rule-chk"
+                                       value="{{ r.id }}"
+                                       data-device="{{ item.folder.device_group_id }}"
+                                       data-folder="{{ item.folder.id }}"
+                                       onchange="updateBulkBar()">
+                            </td>
+                            <td style="color:#94a3b8;font-size:11px">{{ loop.index }}</td>
+                            <td>
+                                <div class="rule-name">
+                                    {{ r.name }}
+                                    {% if r.is_modified %}
+                                    <span title="Изменено на СУ: {{ r.modified_at }}"
+                                          style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-left:5px;vertical-align:middle;flex-shrink:0"></span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {% if r.src_zone == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div>{{ r.src_zone | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.src_net == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div style="font-size:12px">{{ r.src_net | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.dst_zone == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div>{{ r.dst_zone | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.dst_net == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div style="font-size:12px">{{ r.dst_net | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.service == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div style="font-size:12px">{{ r.service | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.snat_type == 'None' or not r.snat_type %}
+                                    <span class="rule-any">None</span>
+                                {% else %}
+                                    <span class="action-badge" style="background:#dbeafe;color:#1d4ed8;font-size:10px">{{ r.snat_type }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if r.dnat_type == 'None' or not r.dnat_type %}
+                                    <span class="rule-any">None</span>
+                                {% else %}
+                                    <span class="action-badge" style="background:#fce7f3;color:#be185d;font-size:10px">{{ r.dnat_type }}</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align:center">
+                                <div class="form-check form-switch d-flex justify-content-center mb-0">
+                                    <input class="form-check-input rule-toggle" type="checkbox" role="switch"
+                                           data-rule-id="{{ r.id }}"
+                                           {% if r.enabled %}checked{% endif %}
+                                           onchange="toggleNatRule(this)">
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="12" style="text-align:center;padding:20px;color:#94a3b8;font-style:italic;font-size:12px">
+                                Empty folder — click "+ Rule" to add NAT rules
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+            {% endfor %}
+
+        </div>{# /app-content #}
+    </div>{# /app-main #}
+</div>{# /app-layout #}
+
+{# ====================== BULK BAR ====================== #}
+<div class="bulk-bar hidden" id="bulkBar">
+    <span><span class="bulk-bar-count" id="selCount">0</span> selected</span>
+    <button class="btn-bulk light" onclick="openMoveToFolder()">
+        <i class="fas fa-folder-arrow-down me-1"></i>Move to Folder
+    </button>
+    <button class="btn-bulk red" onclick="bulkDelete()">
+        <i class="fas fa-trash me-1"></i>Delete
+    </button>
+    <button class="btn-bulk light" onclick="clearSelection()" style="padding:5px 10px">
+        <i class="fas fa-xmark"></i>
+    </button>
+</div>
+
+{# ====================== MODALS ====================== #}
+
+{# --- CREATE / EDIT NAT RULE --- #}
+<div class="modal fade" id="natModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="natModalTitle">New NAT Rule</h5>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:2px" id="natModalSub"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+                <input type="hidden" id="nm_folder_id">
+                <input type="hidden" id="nm_rule_id">
+
+                {# Row 1: Name + Enabled #}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-8">
+                        <label class="form-label-sm">Rule Name <span style="color:#ef4444">*</span></label>
+                        <input type="text" id="nm_name" class="form-control" placeholder="e.g. SNAT-LAN-to-WAN">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-sm">Enabled</label>
+                        <div class="form-check form-switch mt-1">
+                            <input class="form-check-input" type="checkbox" id="nm_enabled" checked style="width:2.2em;height:1.1em">
+                            <label class="form-check-label" for="nm_enabled" style="font-size:12px">Active</label>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-sm">Description</label>
+                        <input type="text" id="nm_description" class="form-control" placeholder="Optional" style="font-size:12px">
+                    </div>
+                </div>
+
+                <hr style="margin:4px 0 14px;border-color:#f1f5f9">
+
+                {# Row 2: Zones #}
+                <div class="rule-form-section"><i class="fas fa-map-location-dot me-1"></i>Match — Zones</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Source Zone</label>
+                        <div id="nm_picker_src_zone"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Destination Zone</label>
+                        <div id="nm_picker_dst_zone"></div>
+                    </div>
+                </div>
+
+                {# Row 3: Network objects #}
+                <div class="rule-form-section"><i class="fas fa-network-wired me-1"></i>Match — Addresses & Service</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Source Address</label>
+                        <div id="nm_picker_src_net"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Destination Address</label>
+                        <div id="nm_picker_dst_net"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Service</label>
+                        <div id="nm_picker_service"></div>
+                    </div>
+                </div>
+
+                <hr style="margin:4px 0 14px;border-color:#f1f5f9">
+
+                {# SNAT section #}
+                <div class="rule-form-section"><i class="fas fa-arrow-right-arrow-left me-1"></i>Source NAT (SNAT)</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label-sm">SNAT Type</label>
+                        <select id="nm_snat_type" class="form-select" style="font-size:12px" onchange="onSnatTypeChange()">
+                            <option value="NAT_SOURCE_TRANSLATION_TYPE_NONE">None (No SNAT)</option>
+                            <option value="NAT_SOURCE_TRANSLATION_TYPE_DYNAMIC_IP_PORT">PAT (Dynamic IP+Port)</option>
+                            <option value="NAT_SOURCE_TRANSLATION_TYPE_STATIC_IP">Static IP</option>
+                            <option value="NAT_SOURCE_TRANSLATION_TYPE_STATIC_IP_PORT">Static IP+Port</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="nm_snat_addr_type_wrap" style="display:none">
+                        <label class="form-label-sm">Source Address Type</label>
+                        <select id="nm_src_addr_type" class="form-select" style="font-size:12px" onchange="onSnatAddrTypeChange()">
+                            <option value="NAT_SOURCE_TRANSLATION_ADDRESS_TYPE_NONE">None</option>
+                            <option value="NAT_SOURCE_TRANSLATION_ADDRESS_TYPE_INTERFACE_ADDRESS">Interface Address</option>
+                            <option value="NAT_SOURCE_TRANSLATION_ADDRESS_TYPE_ADDRESS_POOL">Address Pool</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="nm_snat_addr_pool_wrap" style="display:none">
+                        <label class="form-label-sm">Translated Source Address</label>
+                        <div id="nm_picker_src_translated"></div>
+                    </div>
+                </div>
+
+                {# DNAT section #}
+                <div class="rule-form-section"><i class="fas fa-arrow-right me-1"></i>Destination NAT (DNAT)</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label-sm">DNAT Type</label>
+                        <select id="nm_dnat_type" class="form-select" style="font-size:12px" onchange="onDnatTypeChange()">
+                            <option value="NAT_DESTINATION_TRANSLATION_TYPE_NONE">None (No DNAT)</option>
+                            <option value="NAT_DESTINATION_TRANSLATION_TYPE_ADDRESS_POOL">DNAT (Address Pool)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="nm_dnat_addr_wrap" style="display:none">
+                        <label class="form-label-sm">Translated Destination Address</label>
+                        <div id="nm_picker_dst_translated"></div>
+                    </div>
+                    <div class="col-md-4" id="nm_dnat_port_wrap" style="display:none">
+                        <label class="form-label-sm">Translated Destination Port</label>
+                        <input type="number" id="nm_dst_translated_port" class="form-control" placeholder="e.g. 8080" min="1" max="65535" style="font-size:12px">
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <div id="nm_loading" style="display:none;align-items:center">
+                    <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                    <span style="font-size:12px">Saving…</span>
+                </div>
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary fw-bold" onclick="submitNat()">
+                    <i class="fas fa-save me-1"></i><span id="nm_save_label">Create Rule</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# --- CREATE FOLDER --- #}
+<div class="modal fade" id="folderModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <form action="/nat/create_folder" method="POST">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-folder-plus me-2 text-primary"></i>New NAT Folder</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="device_id" id="cf_gid">
+                    <div class="mb-3">
+                        <label class="form-label-sm">Folder Name</label>
+                        <input type="text" name="folder_name" class="form-control" placeholder="e.g. VLAN100 NAT" required autofocus>
+                    </div>
+                    <div>
+                        <label class="form-label-sm">Section</label>
+                        <div class="d-flex gap-2">
+                            {% for sec in ['pre', 'default', 'post'] %}
+                            <label style="flex:1;cursor:pointer">
+                                <input type="radio" name="section" value="{{ sec }}" {% if sec == 'pre' %}checked{% endif %} style="display:none" class="sec-radio">
+                                <div class="action-btn {{ 'active allow' if sec == 'pre' else '' }}" style="text-align:center;padding:6px 4px"
+                                     onclick="this.closest('label').querySelector('input').checked=true;document.querySelectorAll('.sec-radio').forEach(r=>r.closest('label').querySelector('div').className='action-btn');this.className='action-btn active allow'">
+                                    {{ sec|upper }}
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold">Create</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# --- MOVE TO FOLDER --- #}
+<div class="modal fade" id="moveModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-folder-arrow-down me-2 text-primary"></i>Move to Folder</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label-sm">Target NAT Folder</label>
+                <select id="move_folder_sel" class="form-select"><option value="">Loading…</option></select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm fw-bold" onclick="submitMove()">Move</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# --- QUICK CREATE OBJECT (inline from picker) --- #}
+<div class="modal fade" id="quickCreateModal" tabindex="-1" style="z-index:1080">
+    <div class="modal-dialog" style="max-width:440px">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold">
+                    <i class="fas fa-plus-circle me-2 text-primary"></i>Quick Create Object
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3" id="qc_type_row">
+                    <label class="form-label-sm">Type</label>
+                    <div class="d-flex flex-wrap gap-1" id="qc_type_btns"></div>
+                    <input type="hidden" id="qc_type">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label-sm">Name <span style="color:#ef4444">*</span></label>
+                    <input type="text" id="qc_name" class="form-control form-control-sm">
+                </div>
+                <div id="qc_f_ip" class="qc-field" style="display:none">
+                    <label class="form-label-sm">Address (IP or CIDR)</label>
+                    <input type="text" id="qc_ip" class="form-control form-control-sm" placeholder="192.168.1.10  or  10.0.0.0/24" style="font-family:monospace">
+                </div>
+                <div id="qc_f_range" class="qc-field" style="display:none">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label-sm">Start IP</label>
+                            <input type="text" id="qc_range_s" class="form-control form-control-sm" style="font-family:monospace" placeholder="10.0.0.1">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-sm">End IP</label>
+                            <input type="text" id="qc_range_e" class="form-control form-control-sm" style="font-family:monospace" placeholder="10.0.0.100">
+                        </div>
+                    </div>
+                </div>
+                <div id="qc_f_fqdn" class="qc-field" style="display:none">
+                    <label class="form-label-sm">Domain</label>
+                    <input type="text" id="qc_fqdn" class="form-control form-control-sm" placeholder="example.com" style="font-family:monospace">
+                </div>
+                <div id="qc_f_svc" class="qc-field" style="display:none">
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="form-label-sm">Protocol</label>
+                            <select id="qc_proto" class="form-select form-select-sm">
+                                <option value="6">TCP (6)</option>
+                                <option value="17">UDP (17)</option>
+                                <option value="1">ICMP (1)</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label-sm">Port from</label>
+                            <input type="number" id="qc_port_s" class="form-control form-control-sm" min="1" max="65535" style="font-family:monospace">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label-sm">Port to</label>
+                            <input type="number" id="qc_port_e" class="form-control form-control-sm" min="1" max="65535" placeholder="—" style="font-family:monospace">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary fw-bold" id="qc_submit_btn" onclick="submitQuickCreate()">
+                    <i class="fas fa-plus me-1"></i>Create &amp; Add
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+'use strict';
+
+const currentDeviceId = document.getElementById('current_device_id').value;
+
+let nmPkSrcZone, nmPkDstZone, nmPkSrcNet, nmPkDstNet, nmPkService, nmPkSrcTrans, nmPkDstTrans;
+
+let _natModal, _folderModal, _moveModal;
+function getNatModal()    { return _natModal    ||= new bootstrap.Modal(document.getElementById('natModal')); }
+function getFolderModal() { return _folderModal ||= new bootstrap.Modal(document.getElementById('folderModal')); }
+function getMoveModal()   { return _moveModal   ||= new bootstrap.Modal(document.getElementById('moveModal')); }
+
+/* =====================================================
+   SIDEBAR TOGGLE
+   ===================================================== */
+function toggleDevice(el, gid) {
+    el.classList.toggle('open');
+    const panel = document.getElementById('dev_' + gid);
+    if (panel) panel.classList.toggle('open');
+}
+
+/* =====================================================
+   SYNC & DEPLOY
+   ===================================================== */
+async function doSync() {
+    if (!await confirmDialog('Sync Configuration', 'This will pull rules and objects from the NGFW device. Continue?', 'Sync', false)) return;
+    showLoading('Syncing from device…');
+    try {
+        const r = await fetch('/sync', { method: 'POST' });
+        if (!r.ok) throw new Error((await r.json()).message || 'Sync failed');
+        showToast('Sync complete!', 'success');
+        setTimeout(() => location.reload(), 800);
+    } catch (e) {
+        hideLoading();
+        showToast('Sync error: ' + e.message, 'error');
+    }
+}
+
+async function doNatDeploy() {
+    if (!currentDeviceId || currentDeviceId === 'None') {
+        showToast('No device selected.', 'warning'); return;
+    }
+    if (!await confirmDialog('Deploy NAT Policy', 'Apply the current NAT folder order to the live device?', 'Deploy', false)) return;
+    showLoading('Deploying NAT policy…');
+    const fd = new FormData();
+    fd.append('device_id', currentDeviceId);
+    try {
+        const r = await fetch('/nat/deploy', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error((await r.json()).message || 'Deploy failed');
+        hideLoading();
+        showToast('NAT Deploy complete!', 'success');
+    } catch (e) {
+        hideLoading();
+        showToast('Deploy error: ' + e.message, 'error');
+    }
+}
+
+/* =====================================================
+   NAT TOGGLE
+   ===================================================== */
+async function toggleNatRule(checkbox) {
+    const ruleId  = checkbox.dataset.ruleId;
+    const enabled = checkbox.checked;
+    checkbox.disabled = true;
+    try {
+        const r = await fetch('/api/v1/nat/rules/toggle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ rule_id: ruleId, enabled })
+        });
+        if (!r.ok) throw new Error((await r.json()).message || 'Failed');
+    } catch (e) {
+        showToast('Toggle failed: ' + e.message, 'error');
+        checkbox.checked = !enabled;
+    } finally {
+        checkbox.disabled = false;
+    }
+}
+
+/* =====================================================
+   DRAG & DROP
+   ===================================================== */
+document.querySelectorAll('.sortable-rules').forEach(tbody => {
+    new Sortable(tbody, {
+        group: 'nat-rules',
+        handle: '.drag-handle',
+        animation: 120,
+        ghostClass: 'sortable-ghost',
+        onEnd: async (evt) => {
+            const fid = evt.to.dataset.folderId;
+            const ids = [...evt.to.querySelectorAll('tr[data-id]')].map(r => r.dataset.id);
+            await fetch('/api/v1/nat/rules/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder_id: fid, rule_ids: ids })
+            });
+        }
+    });
+});
+
+/* =====================================================
+   BULK SELECTION
+   ===================================================== */
+function updateBulkBar() {
+    const n = document.querySelectorAll('.rule-chk:checked').length;
+    const bar = document.getElementById('bulkBar');
+    bar.classList.toggle('hidden', n === 0);
+    document.getElementById('selCount').textContent = n;
+}
+
+function toggleFolderCheck(cb, fid) {
+    document.querySelectorAll(`tbody[data-folder-id="${fid}"] .rule-chk`).forEach(c => c.checked = cb.checked);
+    updateBulkBar();
+}
+
+function clearSelection() {
+    document.querySelectorAll('.rule-chk').forEach(c => c.checked = false);
+    document.querySelectorAll('[id^="chk_folder_"]').forEach(c => c.checked = false);
+    updateBulkBar();
+}
+
+function getSelectedIds() {
+    return [...document.querySelectorAll('.rule-chk:checked')].map(c => c.value);
+}
+
+/* =====================================================
+   MOVE TO FOLDER
+   ===================================================== */
+async function openMoveToFolder() {
+    const ids = getSelectedIds();
+    if (!ids.length) { showToast('Select rules first', 'warning'); return; }
+    const checks = document.querySelectorAll('.rule-chk:checked');
+    const devId = checks[0].dataset.device || currentDeviceId;
+    const sel = document.getElementById('move_folder_sel');
+    sel.innerHTML = '<option>Loading…</option>';
+    getMoveModal().show();
+    try {
+        const res = await fetch(`/api/v1/nat/folders/tree?device_group_id=${devId}`);
+        const folders = await res.json();
+        sel.innerHTML = folders.map(f => `<option value="${f.id}">[${f.section.toUpperCase()}] ${f.name}</option>`).join('');
+    } catch { sel.innerHTML = '<option value="">Error loading folders</option>'; }
+}
+
+async function submitMove() {
+    const fid = document.getElementById('move_folder_sel').value;
+    if (!fid) { showToast('Select a folder', 'warning'); return; }
+    const ids = getSelectedIds();
+    getMoveModal().hide();
+    showLoading('Moving rules…');
+    try {
+        const r = await fetch('/api/v1/nat/rules/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folder_id: fid, rule_ids: ids })
+        });
+        if (!r.ok) throw new Error('Failed');
+        hideLoading();
+        showToast(`${ids.length} rule(s) moved`, 'success');
+        setTimeout(() => location.reload(), 700);
+    } catch (e) {
+        hideLoading();
+        showToast('Move failed: ' + e.message, 'error');
+    }
+}
+
+/* =====================================================
+   DELETE
+   ===================================================== */
+async function bulkDelete() {
+    const ids = getSelectedIds();
+    if (!ids.length) return;
+    if (!await confirmDialog('Delete NAT Rules', `Permanently delete ${ids.length} NAT rule(s) from the device?`, 'Delete')) return;
+    showLoading('Deleting…');
+    try {
+        const r = await fetch('/api/v1/nat/rules/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rule_ids: ids })
+        });
+        if (!r.ok) throw new Error('Failed');
+        hideLoading();
+        showToast(`${ids.length} rule(s) deleted`, 'success');
+        setTimeout(() => location.reload(), 700);
+    } catch (e) {
+        hideLoading();
+        showToast('Delete error: ' + e.message, 'error');
+    }
+}
+
+/* =====================================================
+   CREATE FOLDER
+   ===================================================== */
+function openCreateFolder(gid) {
+    document.getElementById('cf_gid').value = gid || currentDeviceId;
+    getFolderModal().show();
+}
+
+/* =====================================================
+   SNAT/DNAT TYPE VISIBILITY
+   ===================================================== */
+function onSnatTypeChange() {
+    const t = document.getElementById('nm_snat_type').value;
+    const showAddr = t !== 'NAT_SOURCE_TRANSLATION_TYPE_NONE';
+    document.getElementById('nm_snat_addr_type_wrap').style.display = showAddr ? '' : 'none';
+    onSnatAddrTypeChange();
+}
+
+function onSnatAddrTypeChange() {
+    const snatType = document.getElementById('nm_snat_type').value;
+    const addrType = document.getElementById('nm_src_addr_type').value;
+    const showPool = snatType !== 'NAT_SOURCE_TRANSLATION_TYPE_NONE' &&
+                     addrType === 'NAT_SOURCE_TRANSLATION_ADDRESS_TYPE_ADDRESS_POOL';
+    document.getElementById('nm_snat_addr_pool_wrap').style.display = showPool ? '' : 'none';
+}
+
+function onDnatTypeChange() {
+    const t = document.getElementById('nm_dnat_type').value;
+    const show = t !== 'NAT_DESTINATION_TRANSLATION_TYPE_NONE';
+    document.getElementById('nm_dnat_addr_wrap').style.display = show ? '' : 'none';
+    document.getElementById('nm_dnat_port_wrap').style.display = show ? '' : 'none';
+}
+
+/* =====================================================
+   PICKERS INIT
+   ===================================================== */
+async function _initNatPickers(deviceId) {
+    const pickerIds = ['nm_picker_src_zone','nm_picker_dst_zone','nm_picker_src_net',
+                       'nm_picker_dst_net','nm_picker_service',
+                       'nm_picker_src_translated','nm_picker_dst_translated'];
+    pickerIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px">Loading…</div>';
+    });
+
+    try {
+        const [netRes, svcRes, zoneRes] = await Promise.all([
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=net`),
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=service`),
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=zone`),
+        ]);
+        const [nets, svcs, zones] = await Promise.all([netRes.json(), svcRes.json(), zoneRes.json()]);
+
+        const toItems = arr => arr.map(o => ({ id: o.id, name: o.name, global: o.name.startsWith('[Global]') }));
+        const netItems  = toItems(nets);
+        const svcItems  = toItems(svcs);
+        const zoneItems = toItems(zones);
+
+        const mkNet = (q, add) => openQuickCreate(q, 'net',     add);
+        const mkSvc = (q, add) => openQuickCreate(q, 'service', add);
+
+        nmPkSrcZone  = new ObjectPicker(document.getElementById('nm_picker_src_zone'),      { items: zoneItems, placeholder: 'Search zones…',    tagClass: 'zone-t' });
+        nmPkDstZone  = new ObjectPicker(document.getElementById('nm_picker_dst_zone'),      { items: zoneItems, placeholder: 'Search zones…',    tagClass: 'zone-t' });
+        nmPkSrcNet   = new ObjectPicker(document.getElementById('nm_picker_src_net'),       { items: netItems,  placeholder: 'Search addresses…', onCreateNew: mkNet });
+        nmPkDstNet   = new ObjectPicker(document.getElementById('nm_picker_dst_net'),       { items: netItems,  placeholder: 'Search addresses…', onCreateNew: mkNet });
+        nmPkService  = new ObjectPicker(document.getElementById('nm_picker_service'),       { items: svcItems,  placeholder: 'Search services…',  tagClass: 'svc-t', onCreateNew: mkSvc });
+        nmPkSrcTrans = new ObjectPicker(document.getElementById('nm_picker_src_translated'),{ items: netItems,  placeholder: 'Translated source…', onCreateNew: mkNet });
+        nmPkDstTrans = new ObjectPicker(document.getElementById('nm_picker_dst_translated'),{ items: netItems,  placeholder: 'Translated dest…',   onCreateNew: mkNet });
+    } catch (e) {
+        showToast('Failed to load objects: ' + e.message, 'error');
+    }
+}
+
+function _resetNatModal() {
+    document.getElementById('nm_rule_id').value = '';
+    document.getElementById('nm_name').value = '';
+    document.getElementById('nm_description').value = '';
+    document.getElementById('nm_enabled').checked = true;
+    document.getElementById('nm_snat_type').value = 'NAT_SOURCE_TRANSLATION_TYPE_NONE';
+    document.getElementById('nm_src_addr_type').value = 'NAT_SOURCE_TRANSLATION_ADDRESS_TYPE_NONE';
+    document.getElementById('nm_dnat_type').value = 'NAT_DESTINATION_TRANSLATION_TYPE_NONE';
+    document.getElementById('nm_dst_translated_port').value = '';
+    document.getElementById('nm_snat_addr_type_wrap').style.display = 'none';
+    document.getElementById('nm_snat_addr_pool_wrap').style.display = 'none';
+    document.getElementById('nm_dnat_addr_wrap').style.display = 'none';
+    document.getElementById('nm_dnat_port_wrap').style.display = 'none';
+}
+
+/* =====================================================
+   NAT MODAL — CREATE
+   ===================================================== */
+async function openCreateNat(folderId, deviceId) {
+    document.getElementById('natModalTitle').textContent = 'New NAT Rule';
+    document.getElementById('natModalSub').textContent = '';
+    document.getElementById('nm_folder_id').value = folderId;
+    document.getElementById('nm_save_label').textContent = 'Create Rule';
+    _resetNatModal();
+
+    await _initNatPickers(deviceId || currentDeviceId);
+    getNatModal().show();
+    setTimeout(() => document.getElementById('nm_name').focus(), 300);
+}
+
+/* =====================================================
+   NAT MODAL — EDIT (double-click)
+   ===================================================== */
+async function openEditNat(r) {
+    document.getElementById('natModalTitle').textContent = 'Edit NAT Rule';
+    document.getElementById('natModalSub').textContent = r.name;
+    document.getElementById('nm_folder_id').value = r.folder_id;
+    document.getElementById('nm_rule_id').value = r.id;
+    document.getElementById('nm_name').value = r.name;
+    document.getElementById('nm_description').value = r.description || '';
+    document.getElementById('nm_enabled').checked = r.enabled;
+    document.getElementById('nm_save_label').textContent = 'Save Changes';
+
+    document.getElementById('nm_snat_type').value = r.snat_raw || 'NAT_SOURCE_TRANSLATION_TYPE_NONE';
+    document.getElementById('nm_src_addr_type').value = r.src_addr_type || 'NAT_SOURCE_TRANSLATION_ADDRESS_TYPE_NONE';
+    document.getElementById('nm_dnat_type').value = r.dnat_raw || 'NAT_DESTINATION_TRANSLATION_TYPE_NONE';
+    document.getElementById('nm_dst_translated_port').value = r.dst_translated_port || '';
+
+    onSnatTypeChange();
+    onDnatTypeChange();
+
+    await _initNatPickers(currentDeviceId);
+
+    if (nmPkSrcZone)  nmPkSrcZone.setSelectedByIds(r.src_zone_ids   || []);
+    if (nmPkDstZone)  nmPkDstZone.setSelectedByIds(r.dst_zone_ids   || []);
+    if (nmPkSrcNet)   nmPkSrcNet.setSelectedByIds(r.src_net_ids     || []);
+    if (nmPkDstNet)   nmPkDstNet.setSelectedByIds(r.dst_net_ids     || []);
+    if (nmPkService)  nmPkService.setSelectedByIds(r.service_ids    || []);
+    if (nmPkSrcTrans) nmPkSrcTrans.setSelectedByIds(r.src_translated_ids || []);
+    if (nmPkDstTrans) nmPkDstTrans.setSelectedByIds(r.dst_translated_ids || []);
+
+    getNatModal().show();
+}
+
+/* =====================================================
+   NAT MODAL — SUBMIT
+   ===================================================== */
+async function submitNat() {
+    const name = document.getElementById('nm_name').value.trim();
+    if (!name) { showToast('Rule name is required', 'warning'); document.getElementById('nm_name').focus(); return; }
+
+    const ruleId   = document.getElementById('nm_rule_id').value;
+    const folderId = document.getElementById('nm_folder_id').value;
+    const isEdit   = !!ruleId;
+
+    const snatType = document.getElementById('nm_snat_type').value;
+    const dnatType = document.getElementById('nm_dnat_type').value;
+    const dstPort  = parseInt(document.getElementById('nm_dst_translated_port').value) || 0;
+
+    const payload = {
+        name,
+        description:        document.getElementById('nm_description').value.trim(),
+        enabled:            document.getElementById('nm_enabled').checked,
+        src_zone_ids:       nmPkSrcZone  ? nmPkSrcZone.getSelectedIds()  : [],
+        dst_zone_ids:       nmPkDstZone  ? nmPkDstZone.getSelectedIds()  : [],
+        src_net_ids:        nmPkSrcNet   ? nmPkSrcNet.getSelectedIds()   : [],
+        dst_net_ids:        nmPkDstNet   ? nmPkDstNet.getSelectedIds()   : [],
+        service_ids:        nmPkService  ? nmPkService.getSelectedIds()  : [],
+        snat_type:          snatType,
+        src_addr_type:      document.getElementById('nm_src_addr_type').value,
+        src_translated_ids: nmPkSrcTrans ? nmPkSrcTrans.getSelectedIds() : [],
+        dnat_type:          dnatType,
+        dst_translated_ids: nmPkDstTrans ? nmPkDstTrans.getSelectedIds() : [],
+        dst_translated_port: dstPort,
+    };
+
+    if (isEdit) {
+        payload.rule_id = ruleId;
+    } else {
+        payload.folder_id = folderId;
+    }
+
+    // For edits we'd need an update endpoint — for now create only
+    const endpoint = '/api/v1/nat/rules/create';
+    if (isEdit) {
+        showToast('NAT rule edit not yet implemented — use delete + recreate', 'warning');
+        return;
+    }
+
+    document.getElementById('nm_loading').style.display = 'flex';
+    document.querySelector('#natModal .btn-primary').disabled = true;
+
+    try {
+        const r = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.message || 'Unknown error');
+        getNatModal().hide();
+        showToast(`NAT rule "${name}" created`, 'success');
+        setTimeout(() => location.reload(), 800);
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    } finally {
+        document.getElementById('nm_loading').style.display = 'none';
+        document.querySelector('#natModal .btn-primary').disabled = false;
+    }
+}
+
+document.getElementById('nm_name').addEventListener('keydown', e => { if (e.key === 'Enter') submitNat(); });
+
+/* =====================================================
+   QUICK CREATE OBJECT (inline from picker)
+   ===================================================== */
+let _qcCallback = null;
+let _qcModal = null;
+function getQcModal() { return _qcModal ||= new bootstrap.Modal(document.getElementById('quickCreateModal')); }
+
+const QC_TYPES = {
+    net:     [{ id: 'net_ip', label: 'IP / Subnet', icon: 'fa-server' }, { id: 'net_range', label: 'IP Range', icon: 'fa-arrows-left-right' }, { id: 'net_fqdn', label: 'FQDN', icon: 'fa-globe' }],
+    service: [{ id: 'service', label: 'Service', icon: 'fa-gear' }],
+};
+const QC_FIELD_MAP = { net_ip: 'qc_f_ip', net_range: 'qc_f_range', net_fqdn: 'qc_f_fqdn', service: 'qc_f_svc' };
+
+function _qcSelectType(id) {
+    document.getElementById('qc_type').value = id;
+    document.querySelectorAll('.qc-type-btn').forEach(b => {
+        b.className = 'qc-type-btn action-btn' + (b.dataset.id === id ? ' active allow' : '');
+    });
+    document.querySelectorAll('.qc-field').forEach(el => el.style.display = 'none');
+    const fid = QC_FIELD_MAP[id];
+    if (fid) document.getElementById(fid).style.display = '';
+}
+
+function _qcDetectType(text, context) {
+    if (context === 'service') return 'service';
+    if (/^\d{1,3}(\.\d{1,3}){3}\s*[-–]\s*\d{1,3}(\.\d{1,3}){3}$/.test(text.trim())) return 'net_range';
+    if (/^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(text.trim())) return 'net_ip';
+    return 'net_fqdn';
+}
+
+function openQuickCreate(searchText, context, addCallback) {
+    _qcCallback = addCallback;
+    const btnsEl = document.getElementById('qc_type_btns');
+    btnsEl.innerHTML = '';
+    const types = QC_TYPES[context] || QC_TYPES.net;
+    types.forEach((t, i) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.id = t.id;
+        b.className = 'qc-type-btn action-btn' + (i === 0 ? ' active allow' : '');
+        b.style.cssText = 'font-size:11px;padding:4px 12px';
+        b.innerHTML = `<i class="fas ${t.icon} me-1" style="font-size:10px"></i>${t.label}`;
+        b.onclick = () => _qcSelectType(t.id);
+        btnsEl.appendChild(b);
+    });
+    document.getElementById('qc_type_row').style.display = types.length > 1 ? '' : 'none';
+    const detected = _qcDetectType(searchText, context);
+    _qcSelectType(detected);
+    document.getElementById('qc_name').value = searchText;
+    if (detected === 'net_ip')    document.getElementById('qc_ip').value = searchText;
+    if (detected === 'net_fqdn')  document.getElementById('qc_fqdn').value = searchText;
+    if (detected === 'net_range') {
+        const p = searchText.split(/\s*[-–]\s*/);
+        document.getElementById('qc_range_s').value = p[0]?.trim() || '';
+        document.getElementById('qc_range_e').value = p[1]?.trim() || '';
+    }
+    if (detected === 'service') {
+        const m = searchText.match(/\d+/);
+        if (m) document.getElementById('qc_port_s').value = m[0];
+        document.getElementById('qc_port_e').value = '';
+    }
+    getQcModal().show();
+    setTimeout(() => document.getElementById('qc_name').focus(), 300);
+}
+
+async function submitQuickCreate() {
+    const name    = document.getElementById('qc_name').value.trim();
+    const subtype = document.getElementById('qc_type').value;
+    if (!name) { showToast('Name is required', 'warning'); document.getElementById('qc_name').focus(); return; }
+    const payload = { name, obj_type: subtype, device_group_id: currentDeviceId };
+    if (subtype === 'net_ip') {
+        const v = document.getElementById('qc_ip').value.trim();
+        if (!v) { showToast('Enter IP address', 'warning'); return; }
+        payload.ip_value = v;
+    } else if (subtype === 'net_range') {
+        const s = document.getElementById('qc_range_s').value.trim();
+        const e = document.getElementById('qc_range_e').value.trim();
+        if (!s || !e) { showToast('Enter start and end IP', 'warning'); return; }
+        payload.range_start = s; payload.range_end = e;
+    } else if (subtype === 'net_fqdn') {
+        const f = document.getElementById('qc_fqdn').value.trim();
+        if (!f) { showToast('Enter domain name', 'warning'); return; }
+        payload.fqdn = f;
+    } else if (subtype === 'service') {
+        payload.protocol       = parseInt(document.getElementById('qc_proto').value);
+        payload.dst_port_start = parseInt(document.getElementById('qc_port_s').value) || 0;
+        payload.dst_port_end   = parseInt(document.getElementById('qc_port_e').value) || 0;
+    }
+    const btn = document.getElementById('qc_submit_btn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Creating…';
+    try {
+        const r = await fetch('/api/v1/objects/create', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        if (!r.ok || data.status === 'error') throw new Error(data.message || 'Failed');
+        getQcModal().hide();
+        showToast(`"${name}" создан и добавлен`, 'success');
+        if (_qcCallback) { _qcCallback({ id: data.id, name }); _qcCallback = null; }
+    } catch (e) {
+        showToast('Ошибка: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus me-1"></i>Create &amp; Add';
+    }
+}
+document.getElementById('qc_name').addEventListener('keydown', e => { if (e.key === 'Enter') submitQuickCreate(); });
+</script>
+
+{# --- shared UI helpers (toast / loading / confirmDialog) --- #}
+<script>
+function showToast(msg, type='info') {
+    const colors = { success:'#22c55e', error:'#ef4444', warning:'#f59e0b', info:'#3b82f6' };
+    const icons  = { success:'fa-circle-check', error:'fa-circle-xmark', warning:'fa-triangle-exclamation', info:'fa-circle-info' };
+    const t = document.createElement('div');
+    t.className = 'toast-item';
+    t.innerHTML = `<i class="fas ${icons[type]||icons.info}" style="color:${colors[type]||colors.info};flex-shrink:0"></i><span>${msg}</span>`;
+    const stack = document.getElementById('toastStack');
+    stack.appendChild(t);
+    requestAnimationFrame(() => t.classList.add('show'));
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 350); }, 3500);
+}
+
+let _loadingEl = null;
+function showLoading(msg='Please wait…') {
+    if (!_loadingEl) {
+        _loadingEl = document.createElement('div');
+        _loadingEl.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+        _loadingEl.innerHTML=`<div style="background:#1e293b;border-radius:14px;padding:28px 36px;color:#e2e8f0;display:flex;align-items:center;gap:14px;font-size:14px"><div class="spinner-border text-primary" style="width:1.6rem;height:1.6rem"></div><span id="_loadMsg">${msg}</span></div>`;
+        document.body.appendChild(_loadingEl);
+    } else {
+        document.getElementById('_loadMsg').textContent = msg;
+        _loadingEl.style.display = 'flex';
+    }
+}
+function hideLoading() { if (_loadingEl) _loadingEl.style.display = 'none'; }
+
+function confirmDialog(title, msg, confirmBtn='Confirm', isDanger=true) {
+    return new Promise(resolve => {
+        let el = document.getElementById('_confirmDlg');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = '_confirmDlg';
+            el.innerHTML = `<div style="position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:10000;display:flex;align-items:center;justify-content:center">
+                <div style="background:#1e293b;border-radius:14px;padding:28px 32px;max-width:400px;width:90%;color:#e2e8f0">
+                    <div style="font-size:16px;font-weight:700;margin-bottom:10px" id="_cdTitle"></div>
+                    <div style="font-size:13px;color:#94a3b8;margin-bottom:20px" id="_cdMsg"></div>
+                    <div style="display:flex;justify-content:flex-end;gap:10px">
+                        <button id="_cdCancel" class="btn btn-light btn-sm">Cancel</button>
+                        <button id="_cdOk" class="btn btn-sm fw-bold"></button>
+                    </div>
+                </div></div>`;
+            document.body.appendChild(el);
+        }
+        document.getElementById('_cdTitle').textContent = title;
+        document.getElementById('_cdMsg').textContent = msg;
+        const ok = document.getElementById('_cdOk');
+        ok.textContent = confirmBtn;
+        ok.className = `btn btn-sm fw-bold ${isDanger ? 'btn-danger' : 'btn-primary'}`;
+        el.style.display = '';
+        const close = (val) => { el.style.display = 'none'; resolve(val); };
+        ok.onclick = () => close(true);
+        document.getElementById('_cdCancel').onclick = () => close(false);
+    });
+}
+</script>
+{% endblock %}

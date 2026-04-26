@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login — NGFW Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/app.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-wrap {
+            width: 100%;
+            max-width: 400px;
+            padding: 16px;
+        }
+        .login-card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 24px 60px rgba(0,0,0,.4);
+            overflow: hidden;
+        }
+        .login-header {
+            background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+            padding: 28px 24px 22px;
+            text-align: center;
+            color: #fff;
+        }
+        .login-logo {
+            width: 52px; height: 52px;
+            background: rgba(255,255,255,.15);
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 12px;
+            font-size: 24px;
+        }
+        .login-title { font-size: 20px; font-weight: 800; margin: 0; }
+        .login-sub { font-size: 12px; opacity: .75; margin-top: 3px; }
+        .login-body { padding: 24px; }
+        .field-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            color: #64748b;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .field-group {
+            display: flex;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .field-group:focus-within {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+        }
+        .field-icon {
+            width: 38px;
+            display: flex; align-items: center; justify-content: center;
+            background: #f8fafc;
+            color: #94a3b8;
+            font-size: 13px;
+            border-right: 1px solid #e2e8f0;
+            flex-shrink: 0;
+        }
+        .field-input {
+            flex: 1;
+            border: none;
+            outline: none;
+            padding: 9px 12px;
+            font-size: 13px;
+            background: transparent;
+            color: #0f172a;
+        }
+        .btn-login {
+            width: 100%;
+            padding: 11px;
+            background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity .15s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-login:hover { opacity: .9; }
+        .error-box {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .field-mb { margin-bottom: 14px; }
+    </style>
+</head>
+<body>
+
+<div class="login-wrap">
+    <div class="login-card">
+        <div class="login-header">
+            <div class="login-logo">
+                <i class="fas fa-shield-halved"></i>
+            </div>
+            <h1 class="login-title">NGFW Manager</h1>
+            <p class="login-sub">Policy Management System</p>
+        </div>
+        <div class="login-body">
+            {% if error %}
+            <div class="error-box">
+                <i class="fas fa-exclamation-circle"></i>
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <form action="/login" method="POST">
+                <div class="field-mb">
+                    <label class="field-label">NGFW Host / URL</label>
+                    <div class="field-group">
+                        <div class="field-icon"><i class="fas fa-server"></i></div>
+                        <input type="text" name="host" class="field-input" placeholder="192.168.1.1 или localhost:3663" required autocomplete="url">
+                    </div>
+                </div>
+
+                <div class="field-mb">
+                    <label class="field-label">Username</label>
+                    <div class="field-group">
+                        <div class="field-icon"><i class="fas fa-user"></i></div>
+                        <input type="text" name="username" class="field-input" placeholder="admin" required autocomplete="username">
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label class="field-label">Password</label>
+                    <div class="field-group">
+                        <div class="field-icon"><i class="fas fa-lock"></i></div>
+                        <input type="password" name="password" class="field-input" placeholder="••••••••" required autocomplete="current-password">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-login">
+                    <i class="fas fa-right-to-bracket"></i>
+                    Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+    <p style="text-align:center;color:rgba(255,255,255,.3);font-size:11px;margin-top:16px">
+        NGFW Policy Manager v2.0
+    </p>
+</div>
+
+</body>
+</html>

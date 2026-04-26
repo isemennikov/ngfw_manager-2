@@ -1,0 +1,1192 @@
+{% extends "base.html" %}
+{% block title %}Policy Editor — NGFW Manager{% endblock %}
+
+{% block body %}
+<div class="app-layout">
+
+    {# ====================== SIDEBAR ====================== #}
+    {% include "components/sidebar.html" %}
+
+    {# ====================== MAIN ========================= #}
+    <div class="app-main">
+
+        {# --- TOP BAR --- #}
+        <div class="app-topbar">
+            <span class="topbar-title">
+                <i class="fas fa-layer-group" style="color:#3b82f6;margin-right:6px"></i>
+                Policy Editor
+            </span>
+            <div class="topbar-sep"></div>
+
+            <button class="btn-top" onclick="doSync()" title="Pull configuration from device">
+                <i class="fas fa-rotate"></i> Sync
+            </button>
+            <button class="btn-top success" onclick="doCommit()" title="Apply folder order to NGFW">
+                <i class="fas fa-upload"></i> Deploy
+            </button>
+            <div class="topbar-sep"></div>
+            <a href="/nat" class="btn-top" style="text-decoration:none">
+                <i class="fas fa-arrows-left-right"></i> NAT
+            </a>
+            <a href="/objects" class="btn-top" style="text-decoration:none">
+                <i class="fas fa-cubes"></i> Objects
+            </a>
+            <div class="topbar-sep"></div>
+            <a href="https://www.tbank.ru/cf/CyEG1GUDMg" target="_blank" class="btn-top" style="text-decoration:none;color:#f59e0b" title="Поддержать разработку">
+                <i class="fas fa-heart"></i> Поддержать
+            </a>
+
+            <input type="hidden" id="current_device_id" value="{{ current_device_id }}">
+        </div>
+
+        {# --- RULES CONTENT --- #}
+        <div class="app-content">
+
+            {% if not dashboard_data %}
+            <div class="empty-state">
+                <i class="fas fa-inbox d-block"></i>
+                <div style="font-size:15px;font-weight:700;margin-bottom:6px">No folder selected</div>
+                <div style="font-size:13px">Select a folder in the sidebar or click <b>Sync</b> to load rules from the device.</div>
+            </div>
+            {% endif %}
+
+            {% for item in dashboard_data %}
+            <div class="folder-card">
+                <div class="folder-card-header">
+                    <input type="checkbox" class="form-check-input" id="chk_folder_{{ item.folder.id }}"
+                           onchange="toggleFolderCheck(this, '{{ item.folder.id }}')">
+                    <div class="folder-card-title">
+                        <i class="fas fa-folder-open" style="color:#3b82f6"></i>
+                        {{ item.folder.name }}
+                        <span class="section-badge {{ item.folder.section }}">{{ item.folder.section|upper }}</span>
+                        <span style="font-weight:400;color:#94a3b8;font-size:11px">{{ item.rules|length }} rules</span>
+                    </div>
+                    <button class="btn-top" style="margin-left:auto;padding:4px 10px"
+                            onclick="openCreateRule('{{ item.folder.id }}', '{{ current_device_id }}')">
+                        <i class="fas fa-plus"></i> Rule
+                    </button>
+                </div>
+
+                <div class="table-scroll">
+                <table class="rules-table">
+                    <thead>
+                        <tr>
+                            <th style="width:28px"></th>
+                            <th style="width:24px"></th>
+                            <th style="width:32px">#</th>
+                            <th style="min-width:160px;width:17%">Name</th>
+                            <th style="min-width:80px;width:9%">Src Zone</th>
+                            <th style="min-width:110px;width:12%">Source</th>
+                            <th style="min-width:80px;width:9%">Dst Zone</th>
+                            <th style="min-width:110px;width:12%">Destination</th>
+                            <th style="min-width:90px;width:9%">Service</th>
+                            <th style="min-width:100px;width:10%">Application</th>
+                            <th style="min-width:90px;width:9%">URL Cat</th>
+                            <th style="width:70px">Action</th>
+                            <th style="width:44px;text-align:center">On</th>
+                        </tr>
+                    </thead>
+                    <tbody class="sortable-rules" data-folder-id="{{ item.folder.id }}">
+                        {% for r in item.rules %}
+                        <tr data-id="{{ r.id }}" ondblclick="openEditRule({{ r | tojson | safe }})"
+                            {% if r.is_modified %}style="background:#fffbeb;border-left:3px solid #f59e0b"{% endif %}>
+                            <td style="padding-left:10px">
+                                <i class="fas fa-grip-vertical drag-handle"></i>
+                            </td>
+                            <td>
+                                <input type="checkbox" class="form-check-input rule-chk"
+                                       value="{{ r.id }}"
+                                       data-device="{{ item.folder.device_group_id }}"
+                                       data-folder="{{ item.folder.id }}"
+                                       onchange="updateBulkBar()">
+                            </td>
+                            <td style="color:#94a3b8;font-size:11px">{{ loop.index }}</td>
+                            <td>
+                                <div class="rule-name">
+                                    {{ r.name }}
+                                    {% if r.is_modified %}
+                                    <span title="Изменено на СУ: {{ r.modified_at }}"
+                                          onclick="acknowledgeRule('{{ r.id }}', this)"
+                                          style="cursor:pointer;display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-left:5px;vertical-align:middle;flex-shrink:0"
+                                          data-bs-toggle="tooltip" data-bs-placement="top"
+                                          title="Изменено через СУ ({{ r.modified_at }}). Нажми чтобы скрыть."></span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {% if r.src_zone == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div>{{ r.src_zone | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.src_net == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div style="font-size:12px">{{ r.src_net | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.dst_zone == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div>{{ r.dst_zone | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.dst_net == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div style="font-size:12px">{{ r.dst_net | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.service == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div style="font-size:12px">{{ r.service | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.application == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div style="font-size:12px">{{ r.application | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% if r.url_category == 'Any' %}<span class="rule-any">Any</span>
+                                {% else %}<div style="font-size:12px">{{ r.url_category | safe }}</div>{% endif %}
+                            </td>
+                            <td>
+                                {% set act = r.action|lower %}
+                                {% if 'allow' in act %}<span class="action-badge allow">ALLOW</span>
+                                {% elif 'drop' in act %}<span class="action-badge drop">DROP</span>
+                                {% elif 'deny' in act %}<span class="action-badge deny">DENY</span>
+                                {% else %}<span class="action-badge" style="background:#f1f5f9;color:#64748b">{{ r.action }}</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align:center">
+                                <div class="form-check form-switch d-flex justify-content-center mb-0">
+                                    <input class="form-check-input rule-toggle" type="checkbox" role="switch"
+                                           data-rule-id="{{ r.id }}"
+                                           {% if r.enabled %}checked{% endif %}
+                                           onchange="toggleRule(this)">
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="13" style="text-align:center;padding:20px;color:#94a3b8;font-style:italic;font-size:12px">
+                                Empty folder — click "+ Rule" to add rules
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>{# /table-scroll #}
+            </div>
+            {% endfor %}
+
+        </div>{# /app-content #}
+    </div>{# /app-main #}
+</div>{# /app-layout #}
+
+{# ====================== BULK BAR ====================== #}
+<div class="bulk-bar hidden" id="bulkBar">
+    <span><span class="bulk-bar-count" id="selCount">0</span> selected</span>
+    <button class="btn-bulk light" onclick="openMoveToFolder()">
+        <i class="fas fa-folder-arrow-down me-1"></i>Move to Folder
+    </button>
+    <button class="btn-bulk light" onclick="openTransfer()">
+        <i class="fas fa-paper-plane me-1"></i>Transfer / Copy
+    </button>
+    <button class="btn-bulk red" onclick="bulkDelete()">
+        <i class="fas fa-trash me-1"></i>Delete
+    </button>
+    <button class="btn-bulk light" onclick="clearSelection()" style="padding:5px 10px">
+        <i class="fas fa-xmark"></i>
+    </button>
+</div>
+
+{# ====================== MODALS ====================== #}
+
+{# --- CREATE / EDIT RULE --- #}
+<div class="modal fade" id="ruleModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="ruleModalTitle">New Rule</h5>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:2px" id="ruleModalSub"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="max-height:75vh;overflow-y:auto">
+                <input type="hidden" id="rm_folder_id">
+                <input type="hidden" id="rm_rule_id">
+
+                {# Row 1: Name + Action + Enabled #}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Rule Name <span style="color:#ef4444">*</span></label>
+                        <input type="text" id="rm_name" class="form-control" placeholder="e.g. Allow-Web-Servers">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Action</label>
+                        <div class="action-group" id="rm_action_group">
+                            <button class="action-btn allow active" onclick="setAction('allow')">
+                                <i class="fas fa-check me-1"></i>Allow
+                            </button>
+                            <button class="action-btn drop" onclick="setAction('drop')">
+                                <i class="fas fa-ban me-1"></i>Drop
+                            </button>
+                            <button class="action-btn deny" onclick="setAction('deny')">
+                                <i class="fas fa-xmark me-1"></i>Deny
+                            </button>
+                        </div>
+                        <input type="hidden" id="rm_action" value="allow">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label-sm">Enabled</label>
+                        <div class="form-check form-switch mt-1">
+                            <input class="form-check-input" type="checkbox" id="rm_enabled" checked style="width:2.2em;height:1.1em">
+                            <label class="form-check-label" for="rm_enabled" style="font-size:12px">Active</label>
+                        </div>
+                    </div>
+                </div>
+
+                <hr style="margin:4px 0 14px;border-color:#f1f5f9">
+
+                {# Row 2: Zones #}
+                <div class="rule-form-section"><i class="fas fa-map-location-dot me-1"></i>Zones</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Source Zone</label>
+                        <div id="picker_src_zone"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Destination Zone</label>
+                        <div id="picker_dst_zone"></div>
+                    </div>
+                </div>
+
+                {# Row 3: Network objects #}
+                <div class="rule-form-section"><i class="fas fa-network-wired me-1"></i>Network Objects</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Source Address</label>
+                        <div id="picker_src_net"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Destination Address</label>
+                        <div id="picker_dst_net"></div>
+                    </div>
+                </div>
+
+                {# Row 4: Service #}
+                <div class="rule-form-section"><i class="fas fa-plug me-1"></i>Service</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-8">
+                        <label class="form-label-sm">Service</label>
+                        <div id="picker_service"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Log Mode</label>
+                        <select id="rm_log_mode" class="form-select" style="font-size:12px">
+                            <option value="SECURITY_RULE_LOG_MODE_AT_RULE_HIT">At Rule Hit</option>
+                            <option value="SECURITY_RULE_LOG_MODE_AT_SESSION_START">Session Start</option>
+                            <option value="SECURITY_RULE_LOG_MODE_AT_SESSION_END">Session End</option>
+                            <option value="SECURITY_RULE_LOG_MODE_AT_SESSION_START_AND_END">Start &amp; End</option>
+                            <option value="SECURITY_RULE_LOG_MODE_NO_LOG">No Log</option>
+                        </select>
+                    </div>
+                </div>
+
+                {# Row 5: L7 Filtering #}
+                <div class="rule-form-section"><i class="fas fa-layer-group me-1"></i>L7 Filtering</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Applications</label>
+                        <div id="picker_app"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label-sm">URL Categories</label>
+                        <div id="picker_urlcat"></div>
+                    </div>
+                </div>
+
+                {# Row 6: Identity #}
+                <div class="rule-form-section"><i class="fas fa-user-shield me-1"></i>Identity</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label-sm">Source Users / Groups</label>
+                        <div id="picker_user"></div>
+                    </div>
+                </div>
+
+                {# Row 7: Security Profiles #}
+                <div class="rule-form-section"><i class="fas fa-shield-halved me-1"></i>Security Profiles</div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label-sm">IPS Profile</label>
+                        <select id="rm_ips_profile" class="form-select" style="font-size:12px">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label-sm">Antivirus Profile</label>
+                        <select id="rm_av_profile" class="form-select" style="font-size:12px">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label-sm">ICAP Profile</label>
+                        <select id="rm_icap_profile" class="form-select" style="font-size:12px">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+                </div>
+
+                {# Row 8: Description #}
+                <div class="mt-1">
+                    <label class="form-label-sm">Description <span style="color:#94a3b8;font-weight:400;text-transform:none">(optional)</span></label>
+                    <input type="text" id="rm_description" class="form-control" placeholder="Optional description" style="font-size:12px">
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <div id="rm_loading" style="display:none">
+                    <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                    <span style="font-size:12px">Saving…</span>
+                </div>
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary fw-bold" onclick="submitRule()">
+                    <i class="fas fa-save me-1"></i><span id="rm_save_label">Create Rule</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# --- CREATE FOLDER --- #}
+<div class="modal fade" id="folderModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <form action="/create_folder" method="POST">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-folder-plus me-2 text-primary"></i>New Folder</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="device_id" id="cf_gid">
+                    <div class="mb-3">
+                        <label class="form-label-sm">Folder Name</label>
+                        <input type="text" name="folder_name" class="form-control" placeholder="e.g. VLAN100 Policy" required autofocus>
+                    </div>
+                    <div>
+                        <label class="form-label-sm">Section</label>
+                        <div class="d-flex gap-2">
+                            {% for sec in ['pre', 'default', 'post'] %}
+                            <label style="flex:1;cursor:pointer">
+                                <input type="radio" name="section" value="{{ sec }}" {% if sec == 'pre' %}checked{% endif %} style="display:none" class="sec-radio">
+                                <div class="action-btn {{ 'active allow' if sec == 'pre' else '' }}" style="text-align:center;padding:6px 4px"
+                                     onclick="this.closest('label').querySelector('input').checked=true;document.querySelectorAll('.sec-radio').forEach(r=>r.closest('label').querySelector('div').className='action-btn');this.className='action-btn active allow'">
+                                    {{ sec|upper }}
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold">Create</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# --- MOVE TO FOLDER --- #}
+<div class="modal fade" id="moveModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-folder-arrow-down me-2 text-primary"></i>Move to Folder</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label-sm">Target Folder</label>
+                <select id="move_folder_sel" class="form-select">
+                    <option value="">Loading…</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm fw-bold" onclick="submitMove()">Move</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# --- TRANSFER / COPY --- #}
+<div class="modal fade" id="transferModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-paper-plane me-2 text-primary"></i>Transfer / Copy Rules</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label-sm">Target Device Group</label>
+                    <select id="tr_device" class="form-select" onchange="loadTransferFolders()">
+                        <option value="">— Select Device —</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label-sm">Target Folder <span style="color:#94a3b8;font-weight:400;text-transform:none">(optional)</span></label>
+                    <select id="tr_folder" class="form-select" disabled>
+                        <option value="">Default (top of policy)</option>
+                    </select>
+                </div>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:12px;color:#64748b">
+                    <i class="fas fa-info-circle me-1 text-primary"></i>
+                    Objects from the source device will be matched or cloned on the target.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="doTransfer('copy')">
+                    <i class="fas fa-copy me-1"></i>Copy
+                </button>
+                <button type="button" class="btn btn-primary btn-sm fw-bold" onclick="doTransfer('move')">
+                    <i class="fas fa-arrow-right me-1"></i>Move
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# --- CONFLICTS REPORT --- #}
+<div class="modal fade" id="conflictsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-triangle-exclamation me-2 text-warning"></i>Object Conflicts Resolved</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px;color:#64748b">The following objects had name conflicts and were automatically renamed on the target device:</p>
+                <div id="conflicts_list"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary btn-sm" onclick="bootstrap.Modal.getInstance(document.getElementById('conflictsModal')).hide();location.reload()">
+                    OK, Reload
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# --- QUICK CREATE OBJECT (inline from picker) --- #}
+<div class="modal fade" id="quickCreateModal" tabindex="-1" style="z-index:1080">
+    <div class="modal-dialog" style="max-width:440px">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold">
+                    <i class="fas fa-plus-circle me-2 text-primary"></i>Quick Create Object
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {# Type toggle #}
+                <div class="mb-3" id="qc_type_row">
+                    <label class="form-label-sm">Type</label>
+                    <div class="d-flex flex-wrap gap-1" id="qc_type_btns"></div>
+                    <input type="hidden" id="qc_type">
+                </div>
+                {# Name #}
+                <div class="mb-3">
+                    <label class="form-label-sm">Name <span style="color:#ef4444">*</span></label>
+                    <input type="text" id="qc_name" class="form-control form-control-sm">
+                </div>
+                {# IP/Subnet #}
+                <div id="qc_f_ip" class="qc-field" style="display:none">
+                    <label class="form-label-sm">Address (IP or CIDR)</label>
+                    <input type="text" id="qc_ip" class="form-control form-control-sm" placeholder="192.168.1.10  or  10.0.0.0/24" style="font-family:monospace">
+                </div>
+                {# IP Range #}
+                <div id="qc_f_range" class="qc-field" style="display:none">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label-sm">Start IP</label>
+                            <input type="text" id="qc_range_s" class="form-control form-control-sm" style="font-family:monospace" placeholder="10.0.0.1">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label-sm">End IP</label>
+                            <input type="text" id="qc_range_e" class="form-control form-control-sm" style="font-family:monospace" placeholder="10.0.0.100">
+                        </div>
+                    </div>
+                </div>
+                {# FQDN #}
+                <div id="qc_f_fqdn" class="qc-field" style="display:none">
+                    <label class="form-label-sm">Domain</label>
+                    <input type="text" id="qc_fqdn" class="form-control form-control-sm" placeholder="example.com" style="font-family:monospace">
+                </div>
+                {# Service #}
+                <div id="qc_f_svc" class="qc-field" style="display:none">
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="form-label-sm">Protocol</label>
+                            <select id="qc_proto" class="form-select form-select-sm">
+                                <option value="6">TCP (6)</option>
+                                <option value="17">UDP (17)</option>
+                                <option value="1">ICMP (1)</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label-sm">Port from</label>
+                            <input type="number" id="qc_port_s" class="form-control form-control-sm" min="1" max="65535" style="font-family:monospace">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label-sm">Port to</label>
+                            <input type="number" id="qc_port_e" class="form-control form-control-sm" min="1" max="65535" placeholder="—" style="font-family:monospace">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary fw-bold" id="qc_submit_btn" onclick="submitQuickCreate()">
+                    <i class="fas fa-plus me-1"></i>Create &amp; Add
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+'use strict';
+
+/* =====================================================
+   GLOBALS
+   ===================================================== */
+const currentDeviceId = document.getElementById('current_device_id').value;
+
+// Picker instances
+let pkSrcZone, pkDstZone, pkSrcNet, pkDstNet, pkService, pkApp, pkUrlCat, pkUser;
+
+// Modals (lazy init)
+let _ruleModal, _folderModal, _moveModal, _transferModal, _conflictsModal;
+function getRuleModal()      { return _ruleModal      ||= new bootstrap.Modal(document.getElementById('ruleModal')); }
+function getFolderModal()    { return _folderModal    ||= new bootstrap.Modal(document.getElementById('folderModal')); }
+function getMoveModal()      { return _moveModal      ||= new bootstrap.Modal(document.getElementById('moveModal')); }
+function getTransferModal()  { return _transferModal  ||= new bootstrap.Modal(document.getElementById('transferModal')); }
+function getConflictsModal() { return _conflictsModal ||= new bootstrap.Modal(document.getElementById('conflictsModal')); }
+
+/* =====================================================
+   CHANGE TRACKING
+   ===================================================== */
+async function acknowledgeRule(ruleId, dotEl) {
+    try {
+        await fetch('/api/v1/rules/acknowledge', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({rule_ids: [ruleId]})
+        });
+        const row = dotEl.closest('tr');
+        if (row) { row.style.background = ''; row.style.borderLeft = ''; }
+        dotEl.remove();
+    } catch(e) {
+        showToast('Failed to acknowledge: ' + e.message, 'error');
+    }
+}
+
+/* =====================================================
+   SYNC & DEPLOY
+   ===================================================== */
+async function doSync() {
+    if (!await confirmDialog('Sync Configuration', 'This will pull rules and objects from the NGFW device. Continue?', 'Sync', false)) return;
+    showLoading('Syncing from device…');
+    try {
+        const r = await fetch('/sync', { method: 'POST' });
+        if (!r.ok) throw new Error((await r.json()).message || 'Sync failed');
+        showToast('Sync complete!', 'success');
+        setTimeout(() => location.reload(), 800);
+    } catch (e) {
+        hideLoading();
+        showToast('Sync error: ' + e.message, 'error');
+    }
+}
+
+async function doCommit() {
+    if (!currentDeviceId || currentDeviceId === 'None') {
+        showToast('No device selected.', 'warning'); return;
+    }
+    if (!await confirmDialog('Deploy to NGFW', 'Apply the current folder order to the live device?', 'Deploy', false)) return;
+    showLoading('Deploying…');
+    const fd = new FormData();
+    fd.append('device_id', currentDeviceId);
+    try {
+        const r = await fetch('/commit', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error((await r.json()).message || 'Deploy failed');
+        hideLoading();
+        showToast('Deploy complete!', 'success');
+    } catch (e) {
+        hideLoading();
+        showToast('Deploy error: ' + e.message, 'error');
+    }
+}
+
+/* =====================================================
+   ENABLE / DISABLE TOGGLE
+   ===================================================== */
+async function toggleRule(checkbox) {
+    const ruleId  = checkbox.dataset.ruleId;
+    const enabled = checkbox.checked;
+    checkbox.disabled = true;
+    try {
+        const r = await fetch('/api/v1/rules/toggle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ rule_id: ruleId, enabled })
+        });
+        if (!r.ok) throw new Error((await r.json()).message || 'Failed');
+    } catch (e) {
+        showToast('Toggle failed: ' + e.message, 'error');
+        checkbox.checked = !enabled;
+    } finally {
+        checkbox.disabled = false;
+    }
+}
+
+/* =====================================================
+   DRAG & DROP
+   ===================================================== */
+document.querySelectorAll('.sortable-rules').forEach(tbody => {
+    new Sortable(tbody, {
+        group: 'rules',
+        handle: '.drag-handle',
+        animation: 120,
+        ghostClass: 'sortable-ghost',
+        onEnd: async (evt) => {
+            const fid = evt.to.dataset.folderId;
+            const ids = [...evt.to.querySelectorAll('tr[data-id]')].map(r => r.dataset.id);
+            await fetch('/api/v1/rules/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder_id: fid, rule_ids: ids })
+            });
+        }
+    });
+});
+
+/* =====================================================
+   BULK SELECTION
+   ===================================================== */
+function updateBulkBar() {
+    const n = document.querySelectorAll('.rule-chk:checked').length;
+    const bar = document.getElementById('bulkBar');
+    bar.classList.toggle('hidden', n === 0);
+    document.getElementById('selCount').textContent = n;
+}
+
+function toggleFolderCheck(cb, fid) {
+    document.querySelectorAll(`tbody[data-folder-id="${fid}"] .rule-chk`).forEach(c => c.checked = cb.checked);
+    updateBulkBar();
+}
+
+function clearSelection() {
+    document.querySelectorAll('.rule-chk').forEach(c => c.checked = false);
+    document.querySelectorAll('[id^="chk_folder_"]').forEach(c => c.checked = false);
+    updateBulkBar();
+}
+
+function getSelectedIds() {
+    return [...document.querySelectorAll('.rule-chk:checked')].map(c => c.value);
+}
+
+/* =====================================================
+   MOVE TO FOLDER
+   ===================================================== */
+async function openMoveToFolder() {
+    const ids = getSelectedIds();
+    if (!ids.length) { showToast('Select rules first', 'warning'); return; }
+    const checks = document.querySelectorAll('.rule-chk:checked');
+    const devId = checks[0].dataset.device || currentDeviceId;
+    const sel = document.getElementById('move_folder_sel');
+    sel.innerHTML = '<option>Loading…</option>';
+    getMoveModal().show();
+    try {
+        const res = await fetch(`/api/v1/rules/folders/tree?device_group_id=${devId}`);
+        const folders = await res.json();
+        sel.innerHTML = folders.map(f => `<option value="${f.id}">[${f.section.toUpperCase()}] ${f.name}</option>`).join('');
+    } catch { sel.innerHTML = '<option value="">Error loading folders</option>'; }
+}
+
+async function submitMove() {
+    const fid = document.getElementById('move_folder_sel').value;
+    if (!fid) { showToast('Select a folder', 'warning'); return; }
+    const ids = getSelectedIds();
+    getMoveModal().hide();
+    showLoading('Moving rules…');
+    try {
+        const r = await fetch('/api/v1/rules/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folder_id: fid, rule_ids: ids })
+        });
+        if (!r.ok) throw new Error('Failed');
+        hideLoading();
+        showToast(`${ids.length} rule(s) moved`, 'success');
+        setTimeout(() => location.reload(), 700);
+    } catch (e) {
+        hideLoading();
+        showToast('Move failed: ' + e.message, 'error');
+    }
+}
+
+/* =====================================================
+   TRANSFER / COPY
+   ===================================================== */
+function openTransfer() {
+    const ids = getSelectedIds();
+    if (!ids.length) { showToast('Select rules first', 'warning'); return; }
+    const devSel = document.getElementById('tr_device');
+    devSel.innerHTML = '<option value="">— Select Device —</option>';
+    document.querySelectorAll('.sidebar-device').forEach(dev => {
+        const hdr = dev.querySelector('.sidebar-device-header');
+        const panel = dev.querySelector('.sidebar-folders');
+        if (!hdr || !panel) return;
+        const gid = panel.id.replace('dev_', '');
+        const name = hdr.querySelector('span')?.textContent?.trim();
+        if (gid && name) devSel.add(new Option(name, gid));
+    });
+    document.getElementById('tr_folder').innerHTML = '<option value="">Default (top of policy)</option>';
+    document.getElementById('tr_folder').disabled = true;
+    getTransferModal().show();
+}
+
+async function loadTransferFolders() {
+    const devId = document.getElementById('tr_device').value;
+    const folSel = document.getElementById('tr_folder');
+    folSel.disabled = true;
+    folSel.innerHTML = '<option value="">Loading…</option>';
+    if (!devId) return;
+    try {
+        const res = await fetch(`/api/v1/rules/folders/tree?device_group_id=${devId}`);
+        const folders = await res.json();
+        folSel.innerHTML = '<option value="">Default (top of policy)</option>';
+        folders.forEach(f => folSel.add(new Option(`[${f.section.toUpperCase()}] ${f.name}`, f.id)));
+        folSel.disabled = false;
+    } catch { folSel.innerHTML = '<option value="">Error</option>'; }
+}
+
+async function doTransfer(mode) {
+    const devId = document.getElementById('tr_device').value;
+    if (!devId) { showToast('Select a target device', 'warning'); return; }
+    const folId = document.getElementById('tr_folder').value || null;
+    const ids = getSelectedIds();
+    getTransferModal().hide();
+    showLoading(mode === 'move' ? 'Moving rules…' : 'Copying rules…');
+    try {
+        const r = await fetch('/api/v1/rules/transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rule_ids: ids, target_gid: devId, target_folder_id: folId, mode })
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.message || 'Transfer failed');
+        hideLoading();
+        if (data.conflicts && data.conflicts.length) {
+            let html = '<ul class="list-group list-group-flush">';
+            data.conflicts.forEach(c => {
+                html += `<li class="list-group-item py-2 d-flex align-items-center gap-2" style="font-size:12px">
+                    <span class="text-muted">${c.type}</span><b>${c.old}</b>
+                    <i class="fas fa-arrow-right text-muted"></i><b class="text-danger">${c.new}</b></li>`;
+            });
+            html += '</ul>';
+            document.getElementById('conflicts_list').innerHTML = html;
+            getConflictsModal().show();
+        } else {
+            showToast(`${ids.length} rule(s) ${mode === 'move' ? 'moved' : 'copied'} successfully`, 'success');
+            setTimeout(() => location.reload(), 900);
+        }
+    } catch (e) {
+        hideLoading();
+        showToast('Transfer error: ' + e.message, 'error');
+    }
+}
+
+/* =====================================================
+   DELETE
+   ===================================================== */
+async function bulkDelete() {
+    const ids = getSelectedIds();
+    if (!ids.length) return;
+    if (!await confirmDialog('Delete Rules', `Permanently delete ${ids.length} rule(s) from the device?`, 'Delete')) return;
+    showLoading('Deleting…');
+    try {
+        const r = await fetch('/api/v1/rules/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rule_ids: ids })
+        });
+        if (!r.ok) throw new Error('Failed');
+        hideLoading();
+        showToast(`${ids.length} rule(s) deleted`, 'success');
+        setTimeout(() => location.reload(), 700);
+    } catch (e) {
+        hideLoading();
+        showToast('Delete error: ' + e.message, 'error');
+    }
+}
+
+/* =====================================================
+   CREATE FOLDER
+   ===================================================== */
+function openCreateFolder(gid) {
+    document.getElementById('cf_gid').value = gid || currentDeviceId;
+    getFolderModal().show();
+}
+
+/* =====================================================
+   RULE MODAL — HELPERS
+   ===================================================== */
+function setAction(a) {
+    document.getElementById('rm_action').value = a;
+    document.querySelectorAll('#rm_action_group .action-btn').forEach(b => {
+        b.className = 'action-btn ' + b.getAttribute('onclick').match(/'(\w+)'/)[1];
+    });
+    event.currentTarget.classList.add('active');
+}
+
+function setActionSilent(a) {
+    document.getElementById('rm_action').value = a;
+    document.querySelectorAll('#rm_action_group .action-btn').forEach(b => {
+        const ba = b.getAttribute('onclick').match(/'(\w+)'/)?.[1];
+        b.className = 'action-btn ' + ba + (ba === a ? ' active' : '');
+    });
+}
+
+function _resetModal() {
+    document.getElementById('rm_rule_id').value = '';
+    document.getElementById('rm_name').value = '';
+    document.getElementById('rm_description').value = '';
+    document.getElementById('rm_enabled').checked = true;
+    document.getElementById('rm_log_mode').value = 'SECURITY_RULE_LOG_MODE_AT_RULE_HIT';
+    setActionSilent('allow');
+    ['rm_ips_profile','rm_av_profile','rm_icap_profile'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+}
+
+/* =====================================================
+   PICKERS INIT
+   ===================================================== */
+async function _initPickers(deviceId) {
+    const pickerIds = ['picker_src_zone','picker_dst_zone','picker_src_net','picker_dst_net',
+                       'picker_service','picker_app','picker_urlcat','picker_user'];
+    pickerIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:8px">Loading…</div>';
+    });
+
+    try {
+        const [netRes, svcRes, zoneRes, appRes, urlRes, userRes] = await Promise.all([
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=net`),
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=service`),
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=zone`),
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=app`),
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=urlcat`),
+            fetch(`/api/v1/objects/list?device_group_id=${deviceId}&category=user`),
+        ]);
+        const [nets, svcs, zones, apps, urls, users] = await Promise.all([
+            netRes.json(), svcRes.json(), zoneRes.json(),
+            appRes.json(), urlRes.json(), userRes.json()
+        ]);
+
+        const toItems = arr => arr.map(o => ({
+            id: o.id, name: o.name, global: o.name.startsWith('[Global]')
+        }));
+
+        const mkNet = (q, add) => openQuickCreate(q, 'net',     add);
+        const mkSvc = (q, add) => openQuickCreate(q, 'service', add);
+
+        pkSrcZone = new ObjectPicker(document.getElementById('picker_src_zone'), { items: toItems(zones), placeholder: 'Search zones…',              tagClass: 'zone-t' });
+        pkDstZone = new ObjectPicker(document.getElementById('picker_dst_zone'), { items: toItems(zones), placeholder: 'Search zones…',              tagClass: 'zone-t' });
+        pkSrcNet  = new ObjectPicker(document.getElementById('picker_src_net'),  { items: toItems(nets),  placeholder: 'Search network objects…',    onCreateNew: mkNet });
+        pkDstNet  = new ObjectPicker(document.getElementById('picker_dst_net'),  { items: toItems(nets),  placeholder: 'Search network objects…',    onCreateNew: mkNet });
+        pkService = new ObjectPicker(document.getElementById('picker_service'),  { items: toItems(svcs),  placeholder: 'Search services…',            tagClass: 'svc-t', onCreateNew: mkSvc });
+        pkApp     = new ObjectPicker(document.getElementById('picker_app'),      { items: toItems(apps),  placeholder: 'Search applications…',        tagClass: 'app-t' });
+        pkUrlCat  = new ObjectPicker(document.getElementById('picker_urlcat'),   { items: toItems(urls),  placeholder: 'Search URL categories…',      tagClass: 'url-t' });
+        pkUser    = new ObjectPicker(document.getElementById('picker_user'),     { items: toItems(users), placeholder: 'Search users / groups…',      tagClass: 'user-t' });
+    } catch (e) {
+        showToast('Failed to load objects: ' + e.message, 'error');
+    }
+}
+
+async function _loadProfiles(deviceId, selIps = '', selAv = '', selIcap = '') {
+    const specs = [
+        { type: 'ips',  selId: 'rm_ips_profile',  selected: selIps  },
+        { type: 'av',   selId: 'rm_av_profile',   selected: selAv   },
+        { type: 'icap', selId: 'rm_icap_profile', selected: selIcap },
+    ];
+    await Promise.all(specs.map(async ({ type, selId, selected }) => {
+        const sel = document.getElementById(selId);
+        try {
+            const res = await fetch(`/api/v1/profiles/list?profile_type=${type}&device_group_id=${deviceId}`);
+            const profiles = await res.json();
+            sel.innerHTML = '<option value="">None</option>';
+            profiles.forEach(p => {
+                const opt = new Option(p.name, p.id);
+                if (p.id === selected) opt.selected = true;
+                sel.add(opt);
+            });
+        } catch {
+            // profiles optional
+        }
+    }));
+}
+
+/* =====================================================
+   RULE MODAL — CREATE
+   ===================================================== */
+async function openCreateRule(folderId, deviceId) {
+    document.getElementById('ruleModalTitle').textContent = 'New Rule';
+    document.getElementById('ruleModalSub').textContent = '';
+    document.getElementById('rm_folder_id').value = folderId;
+    document.getElementById('rm_save_label').textContent = 'Create Rule';
+    _resetModal();
+
+    await Promise.all([
+        _initPickers(deviceId || currentDeviceId),
+        _loadProfiles(deviceId || currentDeviceId),
+    ]);
+
+    getRuleModal().show();
+    setTimeout(() => document.getElementById('rm_name').focus(), 300);
+}
+
+/* =====================================================
+   RULE MODAL — EDIT (double-click)
+   ===================================================== */
+async function openEditRule(r) {
+    document.getElementById('ruleModalTitle').textContent = 'Edit Rule';
+    document.getElementById('ruleModalSub').textContent = r.name;
+    document.getElementById('rm_folder_id').value = r.folder_id;
+    document.getElementById('rm_rule_id').value = r.id;
+    document.getElementById('rm_name').value = r.name;
+    document.getElementById('rm_description').value = r.description || '';
+    document.getElementById('rm_enabled').checked = r.enabled;
+    document.getElementById('rm_log_mode').value = r.log_mode || 'SECURITY_RULE_LOG_MODE_AT_RULE_HIT';
+    document.getElementById('rm_save_label').textContent = 'Save Changes';
+
+    const rawAction = (r.action || 'allow').toLowerCase()
+        .replace('security_rule_action_', '')
+        .split('_')[0];
+    const actionKey = rawAction === 'allow' ? 'allow' : (rawAction === 'drop' ? 'drop' : 'deny');
+    setActionSilent(actionKey);
+
+    const devId = currentDeviceId;
+    await Promise.all([
+        _initPickers(devId),
+        _loadProfiles(devId, r.ips_profile_id || '', r.av_profile_id || '', r.icap_profile_id || ''),
+    ]);
+
+    // Pre-select picker values
+    if (pkSrcZone) pkSrcZone.setSelectedByIds(r.src_zone_ids || []);
+    if (pkDstZone) pkDstZone.setSelectedByIds(r.dst_zone_ids || []);
+    if (pkSrcNet)  pkSrcNet.setSelectedByIds(r.src_net_ids  || []);
+    if (pkDstNet)  pkDstNet.setSelectedByIds(r.dst_net_ids  || []);
+    if (pkService) pkService.setSelectedByIds(r.service_ids || []);
+    if (pkApp)     pkApp.setSelectedByIds(r.app_ids         || []);
+    if (pkUrlCat)  pkUrlCat.setSelectedByIds(r.url_cat_ids  || []);
+    if (pkUser)    pkUser.setSelectedByIds(r.user_ids       || []);
+
+    getRuleModal().show();
+}
+
+/* =====================================================
+   RULE MODAL — SUBMIT (create or update)
+   ===================================================== */
+async function submitRule() {
+    const name = document.getElementById('rm_name').value.trim();
+    if (!name) { showToast('Rule name is required', 'warning'); document.getElementById('rm_name').focus(); return; }
+
+    const ruleId   = document.getElementById('rm_rule_id').value;
+    const folderId = document.getElementById('rm_folder_id').value;
+    const isEdit   = !!ruleId;
+
+    const payload = {
+        name,
+        description:     document.getElementById('rm_description').value.trim(),
+        action:          document.getElementById('rm_action').value,
+        enabled:         document.getElementById('rm_enabled').checked,
+        log_mode:        document.getElementById('rm_log_mode').value,
+        source_zone_ids: pkSrcZone ? pkSrcZone.getSelectedIds() : [],
+        dst_zone_ids:    pkDstZone ? pkDstZone.getSelectedIds() : [],
+        source_ids:      pkSrcNet  ? pkSrcNet.getSelectedIds()  : [],
+        dest_ids:        pkDstNet  ? pkDstNet.getSelectedIds()  : [],
+        service_ids:     pkService ? pkService.getSelectedIds() : [],
+        app_ids:         pkApp     ? pkApp.getSelectedIds()     : [],
+        url_cat_ids:     pkUrlCat  ? pkUrlCat.getSelectedIds()  : [],
+        user_ids:        pkUser    ? pkUser.getSelectedIds()    : [],
+        ips_profile_id:  document.getElementById('rm_ips_profile').value  || '',
+        av_profile_id:   document.getElementById('rm_av_profile').value   || '',
+        icap_profile_id: document.getElementById('rm_icap_profile').value || '',
+    };
+
+    if (isEdit) {
+        payload.rule_id = ruleId;
+    } else {
+        payload.folder_id = folderId;
+    }
+
+    const endpoint = isEdit ? '/api/v1/rules/update' : '/api/v1/rules/create';
+
+    document.getElementById('rm_loading').style.display = 'flex';
+    document.querySelector('#ruleModal .btn-primary').disabled = true;
+
+    try {
+        const r = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.message || 'Unknown error');
+        getRuleModal().hide();
+        showToast(isEdit ? `Rule "${name}" updated` : `Rule "${name}" created`, 'success');
+        setTimeout(() => location.reload(), 800);
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    } finally {
+        document.getElementById('rm_loading').style.display = 'none';
+        document.querySelector('#ruleModal .btn-primary').disabled = false;
+    }
+}
+
+/* Allow Enter in rule name to submit */
+document.getElementById('rm_name').addEventListener('keydown', e => { if (e.key === 'Enter') submitRule(); });
+
+/* =====================================================
+   QUICK CREATE OBJECT (inline from picker)
+   ===================================================== */
+let _qcCallback = null;
+let _qcModal = null;
+function getQcModal() { return _qcModal ||= new bootstrap.Modal(document.getElementById('quickCreateModal')); }
+
+const QC_TYPES = {
+    net: [
+        { id: 'net_ip',    label: 'IP / Subnet', icon: 'fa-server' },
+        { id: 'net_range', label: 'IP Range',    icon: 'fa-arrows-left-right' },
+        { id: 'net_fqdn',  label: 'FQDN',        icon: 'fa-globe' },
+    ],
+    service: [
+        { id: 'service', label: 'Service', icon: 'fa-gear' },
+    ],
+};
+
+const QC_FIELD_MAP = { net_ip: 'qc_f_ip', net_range: 'qc_f_range', net_fqdn: 'qc_f_fqdn', service: 'qc_f_svc' };
+
+function _qcSelectType(id) {
+    document.getElementById('qc_type').value = id;
+    document.querySelectorAll('.qc-type-btn').forEach(b => {
+        b.className = 'qc-type-btn action-btn' + (b.dataset.id === id ? ' active allow' : '');
+    });
+    document.querySelectorAll('.qc-field').forEach(el => el.style.display = 'none');
+    const fid = QC_FIELD_MAP[id];
+    if (fid) document.getElementById(fid).style.display = '';
+}
+
+function _qcDetectType(text, context) {
+    if (context === 'service') return 'service';
+    if (/^\d{1,3}(\.\d{1,3}){3}\s*[-–]\s*\d{1,3}(\.\d{1,3}){3}$/.test(text.trim())) return 'net_range';
+    if (/^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/.test(text.trim())) return 'net_ip';
+    return 'net_fqdn';
+}
+
+function openQuickCreate(searchText, context, addCallback) {
+    _qcCallback = addCallback;
+
+    // Build type buttons
+    const btnsEl = document.getElementById('qc_type_btns');
+    btnsEl.innerHTML = '';
+    const types = QC_TYPES[context] || QC_TYPES.net;
+    types.forEach((t, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.id = t.id;
+        b.className = 'qc-type-btn action-btn' + (i === 0 ? ' active allow' : '');
+        b.style.cssText = 'font-size:11px;padding:4px 12px';
+        b.innerHTML = `<i class="fas ${t.icon} me-1" style="font-size:10px"></i>${t.label}`;
+        b.onclick = () => _qcSelectType(t.id);
+        btnsEl.appendChild(b);
+    });
+    // Hide row if only one type
+    document.getElementById('qc_type_row').style.display = types.length > 1 ? '' : 'none';
+
+    // Auto-detect type and pre-fill
+    const detected = _qcDetectType(searchText, context);
+    _qcSelectType(detected);
+
+    // Pre-fill name and value fields
+    document.getElementById('qc_name').value = searchText;
+    if (detected === 'net_ip')    document.getElementById('qc_ip').value = searchText;
+    if (detected === 'net_fqdn')  document.getElementById('qc_fqdn').value = searchText;
+    if (detected === 'net_range') {
+        const p = searchText.split(/\s*[-–]\s*/);
+        document.getElementById('qc_range_s').value = p[0]?.trim() || '';
+        document.getElementById('qc_range_e').value = p[1]?.trim() || '';
+    }
+    if (detected === 'service') {
+        const m = searchText.match(/\d+/);
+        if (m) document.getElementById('qc_port_s').value = m[0];
+        document.getElementById('qc_port_e').value = '';
+    }
+
+    getQcModal().show();
+    setTimeout(() => document.getElementById('qc_name').focus(), 300);
+}
+
+async function submitQuickCreate() {
+    const name    = document.getElementById('qc_name').value.trim();
+    const subtype = document.getElementById('qc_type').value;
+    if (!name) { showToast('Name is required', 'warning'); document.getElementById('qc_name').focus(); return; }
+
+    const payload = { name, obj_type: subtype, device_group_id: currentDeviceId };
+
+    if (subtype === 'net_ip') {
+        const v = document.getElementById('qc_ip').value.trim();
+        if (!v) { showToast('Enter IP address', 'warning'); return; }
+        payload.ip_value = v;
+    } else if (subtype === 'net_range') {
+        const s = document.getElementById('qc_range_s').value.trim();
+        const e = document.getElementById('qc_range_e').value.trim();
+        if (!s || !e) { showToast('Enter start and end IP', 'warning'); return; }
+        payload.range_start = s; payload.range_end = e;
+    } else if (subtype === 'net_fqdn') {
+        const f = document.getElementById('qc_fqdn').value.trim();
+        if (!f) { showToast('Enter domain name', 'warning'); return; }
+        payload.fqdn = f;
+    } else if (subtype === 'service') {
+        payload.protocol       = parseInt(document.getElementById('qc_proto').value);
+        payload.dst_port_start = parseInt(document.getElementById('qc_port_s').value) || 0;
+        payload.dst_port_end   = parseInt(document.getElementById('qc_port_e').value) || 0;
+    }
+
+    const btn = document.getElementById('qc_submit_btn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Creating…';
+
+    try {
+        const r = await fetch('/api/v1/objects/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await r.json();
+        if (!r.ok || data.status === 'error') throw new Error(data.message || 'Failed');
+
+        getQcModal().hide();
+        showToast(`"${name}" создан и добавлен`, 'success');
+        if (_qcCallback) { _qcCallback({ id: data.id, name }); _qcCallback = null; }
+    } catch (e) {
+        showToast('Ошибка: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus me-1"></i>Create &amp; Add';
+    }
+}
+document.getElementById('qc_name').addEventListener('keydown', e => { if (e.key === 'Enter') submitQuickCreate(); });
+</script>
+{% endblock %}

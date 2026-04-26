@@ -1,0 +1,835 @@
+{% extends "base.html" %}
+{% block title %}System — NGFW Manager{% endblock %}
+
+{% block body %}
+<div class="app-layout">
+
+    {# ===== SIDEBAR ===== #}
+    <aside class="app-sidebar">
+        <div class="sidebar-brand">
+            <div style="width:32px;height:32px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-right:10px;flex-shrink:0">
+                <i class="fas fa-shield-halved" style="color:#fff;font-size:15px"></i>
+            </div>
+            <div>
+                <div class="sidebar-brand-text">NGFW Manager</div>
+                <span class="sidebar-brand-sub">System</span>
+            </div>
+        </div>
+
+        {# Nav tabs #}
+        <div style="display:flex;flex-wrap:wrap;gap:3px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06)">
+            {% for href, label, icon, active in [
+                ('/', 'SEC', 'fa-layer-group', false),
+                ('/nat', 'NAT', 'fa-arrows-left-right', false),
+                ('/objects', 'OBJ', 'fa-cubes', false),
+                ('/logs', 'LOG', 'fa-list-alt', false),
+                ('/policy', 'POL', 'fa-shield-virus', false),
+                ('/system', 'SYS', 'fa-server', true)
+            ] %}
+            <a href="{{ href }}" title="{{ label }}"
+               style="flex:1;min-width:36px;text-align:center;padding:5px 2px;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;transition:.15s;
+                      background:{{ 'rgba(59,130,246,.25)' if active else 'rgba(255,255,255,.06)' }};
+                      color:{{ '#60a5fa' if active else '#94a3b8' }}"
+               {% if not active %}onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'"{% endif %}>
+                <i class="fas {{ icon }}" style="font-size:10px;display:block;margin-bottom:1px"></i>{{ label }}
+            </a>
+            {% endfor %}
+        </div>
+
+        {# Device list #}
+        <div class="sidebar-scroll">
+            <div class="sidebar-section-label">Device</div>
+            {% for dev in devices %}
+            <a href="/system?device_id={{ dev.device_id }}&tab={{ active_tab }}"
+               class="folder-link {{ 'active' if dev.device_id == selected_device_id else '' }}">
+                <i class="fas fa-network-wired" style="font-size:11px;flex-shrink:0"></i>
+                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ dev.name }}">{{ dev.name }}</span>
+            </a>
+            {% else %}
+            <div style="padding:16px;font-size:12px;color:#475569;text-align:center">No devices synced</div>
+            {% endfor %}
+        </div>
+
+        <div class="sidebar-footer">
+            <div style="width:30px;height:30px;background:#1e293b;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <i class="fas fa-user" style="color:#64748b;font-size:12px"></i>
+            </div>
+            <div class="sidebar-user">
+                <div class="sidebar-user-name">{{ user.username }}</div>
+                <div class="sidebar-user-host">{{ user.host }}</div>
+            </div>
+            <a href="/logout" title="Logout" style="color:#475569;text-decoration:none;padding:4px 6px;border-radius:6px;transition:.15s"
+               onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#475569'">
+                <i class="fas fa-power-off"></i>
+            </a>
+        </div>
+    </aside>
+
+    {# ===== MAIN ===== #}
+    <div class="app-main">
+
+        {# Topbar #}
+        <div class="app-topbar">
+            <span class="topbar-title">
+                <i class="fas fa-server" style="color:#3b82f6;margin-right:6px"></i>
+                System Management
+            </span>
+            <div class="topbar-sep"></div>
+
+            {# Tabs #}
+            <div style="display:flex;gap:4px">
+                {% for tid, tlbl, ticon in [
+                    ('admins','Admins','fa-users'),
+                    ('backup','Backup','fa-database'),
+                    ('routing','Routing','fa-route'),
+                    ('interfaces','Interfaces','fa-network-wired'),
+                    ('settings','Settings','fa-sliders')
+                ] %}
+                <button id="tab_{{ tid }}" onclick="setTab('{{ tid }}')"
+                        style="padding:4px 11px;border-radius:6px;border:none;font-size:11px;font-weight:600;cursor:pointer;transition:.15s"
+                        class="sys-tab {{ 'sys-tab-active' if tid == active_tab else '' }}">
+                    <i class="fas {{ ticon }} me-1"></i>{{ tlbl }}
+                </button>
+                {% endfor %}
+            </div>
+
+            <div class="topbar-sep"></div>
+
+            <button id="btnRefresh" onclick="loadTab()"
+                    style="padding:5px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;color:#374151;font-size:12px;font-weight:600;cursor:pointer">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+
+        {# Tab content area #}
+        <div style="flex:1;overflow:auto;padding:20px" id="mainContent">
+            <div style="text-align:center;padding:60px;color:#94a3b8">
+                <i class="fas fa-spinner fa-spin" style="font-size:24px"></i>
+            </div>
+        </div>
+
+    </div>{# /app-main #}
+</div>{# /app-layout #}
+
+
+{# ===== MODALS ===== #}
+
+{# Create Admin modal #}
+<div class="modal fade" id="adminModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:14px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.15)">
+            <div class="modal-header" style="border-bottom:1px solid #f1f5f9;padding:16px 20px">
+                <h5 class="modal-title" style="font-weight:700;font-size:15px">Create Admin</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:20px">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="font-size:12px">Login *</label>
+                    <input type="text" id="adminLogin" class="form-control form-control-sm" placeholder="admin_user">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="font-size:12px">Name</label>
+                    <input type="text" id="adminName" class="form-control form-control-sm" placeholder="Full Name">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" style="font-size:12px">Password *</label>
+                    <input type="password" id="adminPassword" class="form-control form-control-sm">
+                </div>
+                <div class="mb-1">
+                    <label class="form-label fw-semibold" style="font-size:12px">Role</label>
+                    <select id="adminRole" class="form-select form-select-sm">
+                        <option value="SuperAdmin">Super Admin</option>
+                        <option value="Admin">Admin</option>
+                        <option value="ReadOnly" selected>Read Only</option>
+                        <option value="Auditor">Auditor</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #f1f5f9;padding:12px 20px">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitAdmin()" style="font-weight:600">
+                    <i class="fas fa-plus me-1"></i>Create
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Change Password modal #}
+<div class="modal fade" id="pwModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content" style="border-radius:14px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.15)">
+            <div class="modal-header" style="border-bottom:1px solid #f1f5f9;padding:16px 20px">
+                <h5 class="modal-title" style="font-weight:700;font-size:15px">Change Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:20px">
+                <input type="hidden" id="pwAdminId">
+                <label class="form-label fw-semibold" style="font-size:12px">New Password *</label>
+                <input type="password" id="pwNew" class="form-control form-control-sm">
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #f1f5f9;padding:12px 20px">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning btn-sm" onclick="submitPassword()" style="font-weight:600">
+                    Save Password
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Add Route modal #}
+<div class="modal fade" id="routeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:14px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.15)">
+            <div class="modal-header" style="border-bottom:1px solid #f1f5f9;padding:16px 20px">
+                <h5 class="modal-title" style="font-weight:700;font-size:15px">Add Static Route</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:20px">
+                <div class="row g-3 mb-3">
+                    <div class="col-8">
+                        <label class="form-label fw-semibold" style="font-size:12px">Destination *</label>
+                        <input type="text" id="rDest" class="form-control form-control-sm" placeholder="192.168.0.0">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label fw-semibold" style="font-size:12px">Prefix Len *</label>
+                        <input type="number" id="rPrefix" class="form-control form-control-sm" placeholder="24" min="0" max="128">
+                    </div>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" style="font-size:12px">Gateway *</label>
+                        <input type="text" id="rGateway" class="form-control form-control-sm" placeholder="10.0.0.1">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" style="font-size:12px">Interface</label>
+                        <input type="text" id="rInterface" class="form-control form-control-sm" placeholder="eth0">
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-4">
+                        <label class="form-label fw-semibold" style="font-size:12px">Metric</label>
+                        <input type="number" id="rMetric" class="form-control form-control-sm" placeholder="1" min="1">
+                    </div>
+                    <div class="col-8">
+                        <label class="form-label fw-semibold" style="font-size:12px">Description</label>
+                        <input type="text" id="rDesc" class="form-control form-control-sm" placeholder="optional">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #f1f5f9;padding:12px 20px">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitRoute()" style="font-weight:600">
+                    <i class="fas fa-plus me-1"></i>Add Route
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<style>
+.sys-tab        { background:#f1f5f9;color:#64748b; }
+.sys-tab-active { background:#3b82f6;color:#fff; }
+.sys-tab:hover:not(.sys-tab-active) { background:#e2e8f0; }
+
+.info-card {
+    background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:16px;
+}
+.info-card-title {
+    font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;
+    display:flex;align-items:center;gap:6px;
+}
+.kv-row { display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f1f5f9; }
+.kv-row:last-child { border-bottom:none; }
+.kv-key   { color:#64748b;font-weight:500; }
+.kv-val   { color:#0f172a;font-weight:600;text-align:right; }
+
+.status-ok      { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534; }
+.status-blocked { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b; }
+.status-err     { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e; }
+
+.section-head {
+    font-size:13px;font-weight:700;color:#1e293b;margin:0 0 10px;display:flex;align-items:center;justify-content:space-between;
+}
+</style>
+
+
+<script src="/static/js/picker.js"></script>
+<script>
+const DEVICE_ID  = {{ selected_device_id | tojson }};
+let _currentTab  = {{ active_tab | tojson }};
+
+// ---- Tab management ----
+function setTab(tab) {
+    _currentTab = tab;
+    document.querySelectorAll('.sys-tab').forEach(b => b.classList.remove('sys-tab-active'));
+    const btn = document.getElementById('tab_' + tab);
+    if (btn) btn.classList.add('sys-tab-active');
+    const url = new URL(window.location);
+    url.searchParams.set('tab', tab);
+    history.replaceState(null, '', url);
+    loadTab();
+}
+
+function loadTab() {
+    const loaders = {
+        admins:     loadAdmins,
+        backup:     loadBackup,
+        routing:    loadRouting,
+        interfaces: loadInterfaces,
+        settings:   loadSettings,
+    };
+    (loaders[_currentTab] || (() => {}))();
+}
+
+function _loading() {
+    document.getElementById('mainContent').innerHTML =
+        '<div style="text-align:center;padding:60px;color:#94a3b8"><i class="fas fa-spinner fa-spin" style="font-size:24px"></i></div>';
+}
+
+function _err(msg) {
+    document.getElementById('mainContent').innerHTML =
+        `<div style="text-align:center;padding:60px;color:#ef4444;font-size:13px"><i class="fas fa-exclamation-circle me-2"></i>${_esc(msg)}</div>`;
+}
+
+// ================================================================
+// ADMINS
+// ================================================================
+async function loadAdmins() {
+    _loading();
+    try {
+        const r = await fetch(`/api/v1/system/admins?device_group_id=${encodeURIComponent(DEVICE_ID)}`);
+        const data = await r.json();
+        if (data.status !== 'ok') throw new Error(data.message || 'Failed');
+        _renderAdmins(data.admins || []);
+    } catch (e) { _err(e.message); }
+}
+
+function _renderAdmins(admins) {
+    const rows = admins.length ? admins.map(a => {
+        const id    = _g(a, 'id', 'uuid');
+        const login = _g(a, 'login', 'username');
+        const name  = _g(a, 'name', 'displayName', 'fullName');
+        const role  = _g(a, 'role', 'roleName');
+        const blocked = a.blocked === true || a.blocked === 'true' || a.status === 'blocked';
+        return `<tr>
+            <td style="font-weight:700;font-size:12px">${_esc(login)}</td>
+            <td style="font-size:12px">${_esc(name)}</td>
+            <td><span class="tag-pill" style="font-size:10px">${_esc(role)}</span></td>
+            <td><span class="${blocked ? 'status-blocked' : 'status-ok'}">${blocked ? 'Blocked' : 'Active'}</span></td>
+            <td style="text-align:right">
+                <div style="display:flex;gap:4px;justify-content:flex-end">
+                    <button onclick="openPwModal('${_esc(id)}')" title="Change password"
+                            style="padding:3px 7px;border:none;border-radius:5px;background:#dbeafe;color:#1d4ed8;cursor:pointer;font-size:11px">
+                        <i class="fas fa-key"></i>
+                    </button>
+                    <button onclick="adminAction('${_esc(id)}','${blocked ? 'unblock' : 'block'}')" title="${blocked ? 'Unblock' : 'Block'}"
+                            style="padding:3px 7px;border:none;border-radius:5px;background:${blocked ? '#dcfce7' : '#fef3c7'};color:${blocked ? '#166534' : '#92400e'};cursor:pointer;font-size:11px">
+                        <i class="fas ${blocked ? 'fa-unlock' : 'fa-lock'}"></i>
+                    </button>
+                    <button onclick="adminAction('${_esc(id)}','delete')" title="Delete"
+                            style="padding:3px 7px;border:none;border-radius:5px;background:#fee2e2;color:#ef4444;cursor:pointer;font-size:11px">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="5" style="text-align:center;padding:32px;color:#94a3b8;font-size:13px">No admins found</td></tr>';
+
+    document.getElementById('mainContent').innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h6 class="section-head" style="margin:0">Administrators</h6>
+            <button onclick="new bootstrap.Modal(document.getElementById('adminModal')).show()"
+                    style="padding:5px 14px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+                <i class="fas fa-plus me-1"></i>New Admin
+            </button>
+        </div>
+        <table class="rules-table">
+            <thead><tr><th>Login</th><th>Name</th><th>Role</th><th>Status</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+}
+
+function openPwModal(adminId) {
+    document.getElementById('pwAdminId').value = adminId;
+    document.getElementById('pwNew').value = '';
+    new bootstrap.Modal(document.getElementById('pwModal')).show();
+}
+
+async function submitAdmin() {
+    const login = document.getElementById('adminLogin').value.trim();
+    const pw    = document.getElementById('adminPassword').value;
+    if (!login || !pw) { showToast('Login and password are required', 'warning'); return; }
+    showLoading('Creating admin…');
+    try {
+        const r = await fetch('/api/v1/system/admins/create', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                device_group_id: DEVICE_ID,
+                login,
+                name:     document.getElementById('adminName').value.trim(),
+                password: pw,
+                role:     document.getElementById('adminRole').value,
+            }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') {
+            bootstrap.Modal.getInstance(document.getElementById('adminModal')).hide();
+            showToast('Admin created', 'success');
+            await loadAdmins();
+        } else { showToast(data.message || 'Failed', 'error'); }
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+async function submitPassword() {
+    const adminId = document.getElementById('pwAdminId').value;
+    const pw      = document.getElementById('pwNew').value;
+    if (!pw) { showToast('Password required', 'warning'); return; }
+    showLoading('Updating…');
+    try {
+        const r = await fetch('/api/v1/system/admins/password', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ device_group_id: DEVICE_ID, admin_id: adminId, new_password: pw }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') {
+            bootstrap.Modal.getInstance(document.getElementById('pwModal')).hide();
+            showToast('Password updated', 'success');
+        } else { showToast(data.message || 'Failed', 'error'); }
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+async function adminAction(adminId, action) {
+    const labels = { delete: 'delete', block: 'block', unblock: 'unblock' };
+    if (action === 'delete') {
+        if (!await confirmDialog('Delete admin', 'Remove this administrator?', 'Delete', true)) return;
+    }
+    showLoading(`${labels[action]}ing admin…`);
+    try {
+        const r = await fetch('/api/v1/system/admins/action', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ device_group_id: DEVICE_ID, admin_id: adminId, action }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') {
+            showToast(`Admin ${action}ed`, 'success');
+            await loadAdmins();
+        } else { showToast(data.message || 'Failed', 'error'); }
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+// ================================================================
+// BACKUP & SNAPSHOT
+// ================================================================
+async function loadBackup() {
+    _loading();
+    try {
+        const r = await fetch(`/api/v1/system/backups?device_group_id=${encodeURIComponent(DEVICE_ID)}`);
+        const data = await r.json();
+        if (data.status !== 'ok') throw new Error(data.message || 'Failed');
+        _renderBackup(data.backups || [], data.snapshots || []);
+    } catch (e) { _err(e.message); }
+}
+
+function _fmtDate(val) {
+    if (!val) return '—';
+    try { return new Date(val).toLocaleString(); } catch { return String(val); }
+}
+
+function _fmtSize(bytes) {
+    if (!bytes) return '—';
+    const n = Number(bytes);
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
+    return (n/1048576).toFixed(1) + ' MB';
+}
+
+function _renderBackup(backups, snapshots) {
+    const bRows = backups.length ? backups.map(b => {
+        const id   = _g(b, 'id', 'uuid');
+        const name = _g(b, 'name', 'filename', 'description');
+        const date = _g(b, 'createdAt', 'created_at', 'date', 'timestamp');
+        const size = _g(b, 'size', 'fileSize');
+        return `<tr>
+            <td style="font-size:12px;font-weight:600">${_esc(name)}</td>
+            <td style="font-size:12px">${_fmtDate(date)}</td>
+            <td style="font-size:12px">${_fmtSize(size)}</td>
+            <td style="text-align:right">
+                <button onclick="deleteBackup('${_esc(id)}')" title="Delete"
+                        style="padding:3px 7px;border:none;border-radius:5px;background:#fee2e2;color:#ef4444;cursor:pointer;font-size:11px">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="4" style="text-align:center;padding:24px;color:#94a3b8;font-size:12px">No backups</td></tr>';
+
+    const sRows = snapshots.length ? snapshots.map(s => {
+        const id   = _g(s, 'id', 'uuid');
+        const desc = _g(s, 'description', 'name', 'comment');
+        const date = _g(s, 'createdAt', 'created_at', 'date', 'timestamp');
+        return `<tr>
+            <td style="font-size:12px;font-family:monospace">${_esc(id.slice(0,12))}…</td>
+            <td style="font-size:12px">${_esc(desc)}</td>
+            <td style="font-size:12px">${_fmtDate(date)}</td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="3" style="text-align:center;padding:24px;color:#94a3b8;font-size:12px">No snapshots</td></tr>';
+
+    document.getElementById('mainContent').innerHTML = `
+        <div class="row g-4">
+            <div class="col-12 col-xl-7">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                    <h6 class="section-head" style="margin:0"><i class="fas fa-hdd me-2" style="color:#3b82f6"></i>Backups</h6>
+                    <button onclick="createBackup()" style="padding:5px 14px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+                        <i class="fas fa-plus me-1"></i>Create Backup
+                    </button>
+                </div>
+                <table class="rules-table">
+                    <thead><tr><th>Name / File</th><th>Date</th><th>Size</th><th></th></tr></thead>
+                    <tbody>${bRows}</tbody>
+                </table>
+            </div>
+            <div class="col-12 col-xl-5">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                    <h6 class="section-head" style="margin:0"><i class="fas fa-camera me-2" style="color:#8b5cf6"></i>Snapshots</h6>
+                    <button onclick="commitSnapshot()" style="padding:5px 14px;border-radius:8px;border:none;background:#8b5cf6;color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+                        <i class="fas fa-camera me-1"></i>Take Snapshot
+                    </button>
+                </div>
+                <table class="rules-table">
+                    <thead><tr><th>ID</th><th>Description</th><th>Date</th></tr></thead>
+                    <tbody>${sRows}</tbody>
+                </table>
+            </div>
+        </div>`;
+}
+
+async function createBackup() {
+    const desc = prompt('Backup description (optional):') ?? '';
+    showLoading('Creating backup…');
+    try {
+        const r = await fetch('/api/v1/system/backups/create', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ device_group_id: DEVICE_ID, description: desc }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') { showToast('Backup created', 'success'); await loadBackup(); }
+        else showToast(data.message || 'Failed', 'error');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+async function commitSnapshot() {
+    const desc = prompt('Snapshot description (optional):') ?? '';
+    showLoading('Taking snapshot…');
+    try {
+        const r = await fetch('/api/v1/system/snapshots/commit', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ device_group_id: DEVICE_ID, description: desc }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') { showToast('Snapshot created', 'success'); await loadBackup(); }
+        else showToast(data.message || 'Failed', 'error');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+async function deleteBackup(id) {
+    if (!await confirmDialog('Delete backup', 'Remove this backup? This cannot be undone.', 'Delete', true)) return;
+    showLoading('Deleting…');
+    try {
+        const r = await fetch('/api/v1/system/backups/delete', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ device_group_id: DEVICE_ID, backup_id: id }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') { showToast('Backup deleted', 'success'); await loadBackup(); }
+        else showToast(data.message || 'Failed', 'error');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+// ================================================================
+// ROUTING
+// ================================================================
+async function loadRouting() {
+    _loading();
+    try {
+        const r = await fetch(`/api/v1/system/routing?device_group_id=${encodeURIComponent(DEVICE_ID)}`);
+        const data = await r.json();
+        if (data.status !== 'ok') throw new Error(data.message || 'Failed');
+        _renderRouting(data);
+    } catch (e) { _err(e.message); }
+}
+
+function _renderRouting(data) {
+    const routes    = data.routes    || [];
+    const bgpInfo   = data.bgp_info  || {};
+    const bgpPeers  = data.bgp_peers || [];
+    const ospfInfo  = data.ospf_info  || {};
+    const ospfAreas = data.ospf_areas || [];
+
+    const rRows = routes.length ? routes.map(r => {
+        const id    = _g(r, 'id', 'uuid');
+        const dest  = _g(r, 'destination', 'network', 'prefix');
+        const plen  = _g(r, 'prefixLen', 'prefix_len', 'mask', 'prefixLength');
+        const gw    = _g(r, 'gateway', 'nextHop', 'nexthop');
+        const iface = _g(r, 'interface', 'outInterface', 'egress');
+        const met   = _g(r, 'metric', 'distance');
+        const desc  = _g(r, 'description', 'comment', 'name');
+        return `<tr>
+            <td style="font-family:monospace;font-size:12px;font-weight:600">${_esc(dest)}${plen !== '—' ? '/'+plen : ''}</td>
+            <td style="font-family:monospace;font-size:12px">${_esc(gw)}</td>
+            <td style="font-size:12px">${_esc(iface)}</td>
+            <td style="font-size:12px;color:#64748b">${_esc(met)}</td>
+            <td style="font-size:12px;color:#64748b">${_esc(desc)}</td>
+            <td style="text-align:right">
+                <button onclick="deleteRoute('${_esc(id)}')" style="padding:3px 7px;border:none;border-radius:5px;background:#fee2e2;color:#ef4444;cursor:pointer;font-size:11px">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="6" style="text-align:center;padding:24px;color:#94a3b8;font-size:12px">No static routes</td></tr>';
+
+    const bgpPeerRows = bgpPeers.map(p => {
+        const ip    = _g(p, 'ip', 'address', 'neighbor');
+        const asn   = _g(p, 'remoteAsn', 'asn', 'remoteAS');
+        const state = _g(p, 'state', 'status', 'sessionState');
+        const ok    = String(state).toLowerCase() === 'established';
+        return `<tr>
+            <td style="font-family:monospace;font-size:12px">${_esc(ip)}</td>
+            <td style="font-size:12px">${_esc(asn)}</td>
+            <td><span class="${ok ? 'status-ok' : 'status-err'}">${_esc(state)}</span></td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="3" style="text-align:center;padding:16px;color:#94a3b8;font-size:12px">No BGP peers</td></tr>';
+
+    const ospfAreaRows = ospfAreas.map(a => {
+        const id   = _g(a, 'id', 'areaId', 'area');
+        const type = _g(a, 'type', 'areaType');
+        const nets = _g(a, 'networks', 'prefixes');
+        return `<tr>
+            <td style="font-family:monospace;font-size:12px">${_esc(id)}</td>
+            <td style="font-size:12px">${_esc(type)}</td>
+            <td style="font-size:12px">${Array.isArray(nets) ? nets.join(', ') : _esc(nets)}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="3" style="text-align:center;padding:16px;color:#94a3b8;font-size:12px">No OSPF areas</td></tr>';
+
+    const bgpAsn    = _g(bgpInfo, 'asn', 'localAsn', 'localAS');
+    const bgpEn     = bgpInfo.enabled !== false;
+    const ospfRtrId = _g(ospfInfo, 'routerId', 'router_id');
+    const ospfEn    = ospfInfo.enabled !== false;
+
+    document.getElementById('mainContent').innerHTML = `
+        <div class="row g-4">
+            <div class="col-12">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                    <h6 class="section-head" style="margin:0"><i class="fas fa-route me-2" style="color:#3b82f6"></i>Static Routes</h6>
+                    <button onclick="new bootstrap.Modal(document.getElementById('routeModal')).show()"
+                            style="padding:5px 14px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+                        <i class="fas fa-plus me-1"></i>Add Route
+                    </button>
+                </div>
+                <table class="rules-table">
+                    <thead><tr><th>Destination</th><th>Gateway</th><th>Interface</th><th>Metric</th><th>Description</th><th></th></tr></thead>
+                    <tbody>${rRows}</tbody>
+                </table>
+            </div>
+
+            <div class="col-12 col-xl-6">
+                <div class="info-card">
+                    <div class="info-card-title">
+                        <i class="fas fa-project-diagram" style="color:#10b981"></i>BGP
+                        <span class="${bgpEn ? 'status-ok' : 'status-blocked'}" style="margin-left:auto">${bgpEn ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                    ${bgpAsn !== '—' ? `<div class="kv-row"><span class="kv-key">Local ASN</span><span class="kv-val">${_esc(bgpAsn)}</span></div>` : ''}
+                    <div style="margin-top:10px">
+                        <table class="rules-table" style="font-size:11px">
+                            <thead><tr><th>Neighbor</th><th>Remote ASN</th><th>State</th></tr></thead>
+                            <tbody>${bgpPeerRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-xl-6">
+                <div class="info-card">
+                    <div class="info-card-title">
+                        <i class="fas fa-circle-nodes" style="color:#f59e0b"></i>OSPF
+                        <span class="${ospfEn ? 'status-ok' : 'status-blocked'}" style="margin-left:auto">${ospfEn ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                    ${ospfRtrId !== '—' ? `<div class="kv-row"><span class="kv-key">Router ID</span><span class="kv-val">${_esc(ospfRtrId)}</span></div>` : ''}
+                    <div style="margin-top:10px">
+                        <table class="rules-table" style="font-size:11px">
+                            <thead><tr><th>Area</th><th>Type</th><th>Networks</th></tr></thead>
+                            <tbody>${ospfAreaRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+}
+
+async function submitRoute() {
+    const dest = document.getElementById('rDest').value.trim();
+    const gw   = document.getElementById('rGateway').value.trim();
+    const plen = parseInt(document.getElementById('rPrefix').value || '0');
+    if (!dest || !gw) { showToast('Destination and gateway are required', 'warning'); return; }
+    showLoading('Adding route…');
+    try {
+        const r = await fetch('/api/v1/system/routing/create', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                device_group_id: DEVICE_ID,
+                destination: dest,
+                prefix_len:  plen,
+                gateway:     gw,
+                interface:   document.getElementById('rInterface').value.trim(),
+                metric:      parseInt(document.getElementById('rMetric').value || '1'),
+                description: document.getElementById('rDesc').value.trim(),
+            }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') {
+            bootstrap.Modal.getInstance(document.getElementById('routeModal')).hide();
+            showToast('Route added', 'success');
+            await loadRouting();
+        } else showToast(data.message || 'Failed', 'error');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+async function deleteRoute(id) {
+    if (!await confirmDialog('Delete route', 'Remove this static route?', 'Delete', true)) return;
+    showLoading('Deleting…');
+    try {
+        const r = await fetch('/api/v1/system/routing/delete', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ device_group_id: DEVICE_ID, route_id: id }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') { showToast('Route deleted', 'success'); await loadRouting(); }
+        else showToast(data.message || 'Failed', 'error');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+// ================================================================
+// INTERFACES
+// ================================================================
+async function loadInterfaces() {
+    _loading();
+    try {
+        const r = await fetch(`/api/v1/system/interfaces?device_group_id=${encodeURIComponent(DEVICE_ID)}`);
+        const data = await r.json();
+        if (data.status !== 'ok') throw new Error(data.message || 'Failed');
+        _renderInterfaces(data.interfaces || []);
+    } catch (e) { _err(e.message); }
+}
+
+function _renderInterfaces(ifaces) {
+    const rows = ifaces.length ? ifaces.map(i => {
+        const name  = _g(i, 'name', 'ifName', 'interfaceName');
+        const type  = i._itype || _g(i, 'type', 'interfaceType');
+        const ip    = _g(i, 'ip', 'ipAddress', 'address');
+        const mask  = _g(i, 'mask', 'prefixLen', 'prefixLength');
+        const desc  = _g(i, 'description', 'comment');
+        const up    = i.status === 'up' || i.enabled === true || i.state === 'up';
+        return `<tr>
+            <td style="font-weight:700;font-size:12px">${_esc(name)}</td>
+            <td><span class="tag-pill" style="font-size:10px">${_esc(type)}</span></td>
+            <td style="font-family:monospace;font-size:12px">${ip !== '—' ? _esc(ip) + (mask !== '—' ? '/'+mask : '') : '—'}</td>
+            <td><span class="${up ? 'status-ok' : 'status-blocked'}">${up ? 'Up' : 'Down'}</span></td>
+            <td style="font-size:12px;color:#64748b">${_esc(desc)}</td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="5" style="text-align:center;padding:32px;color:#94a3b8;font-size:12px">No interfaces found</td></tr>';
+
+    document.getElementById('mainContent').innerHTML = `
+        <h6 class="section-head"><i class="fas fa-network-wired me-2" style="color:#3b82f6"></i>Virtual & Logical Interfaces</h6>
+        <table class="rules-table">
+            <thead><tr><th>Name</th><th>Type</th><th>IP Address</th><th>Status</th><th>Description</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+}
+
+// ================================================================
+// SETTINGS (Timeouts)
+// ================================================================
+async function loadSettings() {
+    _loading();
+    try {
+        const r = await fetch(`/api/v1/system/timeouts?device_group_id=${encodeURIComponent(DEVICE_ID)}`);
+        const data = await r.json();
+        if (data.status !== 'ok') throw new Error(data.message || 'Failed');
+        _renderSettings(data.timeouts || {});
+    } catch (e) { _err(e.message); }
+}
+
+function _renderSettings(t) {
+    const fields = [
+        ['tcp',           'TCP Session Timeout',      _g(t,'tcp','tcpTimeout')],
+        ['udp',           'UDP Session Timeout',      _g(t,'udp','udpTimeout')],
+        ['icmp',          'ICMP Session Timeout',     _g(t,'icmp','icmpTimeout')],
+        ['tcp_half_open', 'TCP Half-Open Timeout',    _g(t,'tcpHalfOpen','tcpHalfOpenTimeout')],
+        ['tcp_time_wait', 'TCP Time-Wait Timeout',    _g(t,'tcpTimeWait','tcpTimeWaitTimeout')],
+        ['udp_stream',    'UDP Stream Timeout',       _g(t,'udpStream','udpStreamTimeout')],
+    ];
+
+    const inputs = fields.map(([key, label, val]) => `
+        <div class="col-12 col-md-6 col-xl-4">
+            <label class="form-label fw-semibold" style="font-size:12px">${label} <small style="color:#94a3b8">(sec)</small></label>
+            <input type="number" id="to_${key}" class="form-control form-control-sm"
+                   value="${val !== '—' ? _esc(val) : ''}" placeholder="default" min="0">
+        </div>`).join('');
+
+    document.getElementById('mainContent').innerHTML = `
+        <h6 class="section-head"><i class="fas fa-clock me-2" style="color:#3b82f6"></i>Session Timeouts</h6>
+        <div class="info-card">
+            <div class="row g-3 mb-4">${inputs}</div>
+            <button onclick="saveTimeouts()" style="padding:6px 18px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:13px;font-weight:600;cursor:pointer">
+                <i class="fas fa-save me-2"></i>Save Timeouts
+            </button>
+        </div>`;
+}
+
+async function saveTimeouts() {
+    const keys = ['tcp','udp','icmp','tcp_half_open','tcp_time_wait','udp_stream'];
+    const payload = { device_group_id: DEVICE_ID };
+    keys.forEach(k => {
+        const v = document.getElementById('to_' + k)?.value;
+        if (v && v !== '') payload[k] = parseInt(v);
+    });
+    showLoading('Saving timeouts…');
+    try {
+        const r = await fetch('/api/v1/system/timeouts/set', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') showToast('Timeouts saved', 'success');
+        else showToast(data.message || 'Failed', 'error');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { hideLoading(); }
+}
+
+// ================================================================
+// Utils
+// ================================================================
+function _g(obj, ...keys) {
+    for (const k of keys) {
+        if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== '') return obj[k];
+    }
+    return '—';
+}
+function _esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---- Init ----
+document.addEventListener('DOMContentLoaded', () => loadTab());
+</script>
+
+{% endblock %}

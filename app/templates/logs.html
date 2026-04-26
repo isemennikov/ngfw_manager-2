@@ -1,0 +1,692 @@
+{% extends "base.html" %}
+{% block title %}Logs — NGFW Manager{% endblock %}
+
+{% block body %}
+<div class="app-layout">
+
+    {# ===== SIDEBAR ===== #}
+    <aside class="app-sidebar">
+        <div class="sidebar-brand">
+            <div style="width:32px;height:32px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-right:10px;flex-shrink:0">
+                <i class="fas fa-shield-halved" style="color:#fff;font-size:15px"></i>
+            </div>
+            <div>
+                <div class="sidebar-brand-text">NGFW Manager</div>
+                <span class="sidebar-brand-sub">Logs & Monitoring</span>
+            </div>
+        </div>
+
+        {# Nav tabs #}
+        <div style="display:flex;flex-wrap:wrap;gap:3px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06)">
+            {% for href, label, icon, active in [
+                ('/', 'SEC', 'fa-layer-group', false),
+                ('/nat', 'NAT', 'fa-arrows-left-right', false),
+                ('/objects', 'OBJ', 'fa-cubes', false),
+                ('/logs', 'LOG', 'fa-list-alt', true),
+                ('/policy', 'POL', 'fa-shield-virus', false),
+                ('/system', 'SYS', 'fa-server', false)
+            ] %}
+            <a href="{{ href }}" title="{{ label }}"
+               style="flex:1;min-width:36px;text-align:center;padding:5px 2px;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;transition:.15s;
+                      background:{{ 'rgba(59,130,246,.25)' if active else 'rgba(255,255,255,.06)' }};
+                      color:{{ '#60a5fa' if active else '#94a3b8' }}"
+               {% if not active %}onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'"{% endif %}>
+                <i class="fas {{ icon }}" style="font-size:10px;display:block;margin-bottom:1px"></i>{{ label }}
+            </a>
+            {% endfor %}
+        </div>
+
+        {# Logs info block #}
+        <div class="sidebar-scroll">
+            <div class="sidebar-section-label">Log Source</div>
+            <div style="padding:10px 12px;font-size:11px;color:#64748b;line-height:1.5">
+                <i class="fas fa-globe" style="color:#3b82f6;margin-right:5px"></i>
+                <strong style="color:#94a3b8">Global logs</strong><br>
+                <span style="color:#475569">Logs are collected across all devices by the log collector. Use filters to narrow results.</span>
+            </div>
+            <div style="padding:4px 12px 8px">
+                <div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">TTL</div>
+                <div style="font-size:11px;color:#64748b">Cache auto-purges after <strong style="color:#f59e0b">{{ log_ttl_hours }}h</strong></div>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <div style="width:30px;height:30px;background:#1e293b;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <i class="fas fa-user" style="color:#64748b;font-size:12px"></i>
+            </div>
+            <div class="sidebar-user">
+                <div class="sidebar-user-name">{{ user.username }}</div>
+                <div class="sidebar-user-host">{{ user.host }}</div>
+            </div>
+            <a href="/logout" title="Logout" style="color:#475569;text-decoration:none;padding:4px 6px;border-radius:6px;transition:.15s"
+               onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#475569'">
+                <i class="fas fa-power-off"></i>
+            </a>
+        </div>
+    </aside>
+
+    {# ===== MAIN ===== #}
+    <div class="app-main" style="display:flex;flex-direction:column;overflow:hidden">
+
+        {# ---- Topbar ---- #}
+        <div class="app-topbar">
+            <span class="topbar-title">
+                <i class="fas fa-list-alt" style="color:#3b82f6;margin-right:6px"></i>
+                Logs &amp; Monitoring
+            </span>
+            <div class="topbar-sep"></div>
+
+            {# Log type tabs #}
+            <div style="display:flex;gap:4px">
+                {% for lt, lbl, icon in [('traffic','Traffic','fa-arrow-right-arrow-left'),('ips','IPS','fa-shield-virus'),('av','Antivirus','fa-bug'),('audit','Audit','fa-user-shield')] %}
+                <button id="tab_{{ lt }}" onclick="setTab('{{ lt }}')"
+                        style="padding:4px 12px;border-radius:6px;border:none;font-size:11px;font-weight:600;cursor:pointer;transition:.15s"
+                        class="log-tab {{ 'log-tab-active' if loop.first else '' }}">
+                    <i class="fas {{ icon }} me-1"></i>{{ lbl }}
+                </button>
+                {% endfor %}
+            </div>
+
+            <input type="hidden" id="current_device_id" value="{{ selected_device_id or 'global' }}">
+        </div>
+
+        {# ---- Fetch panel ---- #}
+        <div style="padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0">
+
+            {# Fetch panel: period pickers + filters #}
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+
+                {# Date-time range pickers for fetch #}
+                <div>
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Fetch From</div>
+                    <input id="fetch_from" type="datetime-local"
+                           style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none">
+                </div>
+                <div>
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Fetch To</div>
+                    <input id="fetch_to" type="datetime-local"
+                           style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none">
+                </div>
+
+                {# Quick period shortcuts #}
+                <div>
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Quick</div>
+                    <div style="display:flex;gap:4px">
+                        {% for h, lbl in [(1,'1h'),(6,'6h'),(24,'24h')] %}
+                        <button id="period_{{ h }}" onclick="setFetchPeriod({{ h }})"
+                                class="period-btn {{ 'period-active' if loop.first else '' }}"
+                                style="padding:4px 10px;border-radius:6px;border:1px solid #e2e8f0;font-size:11px;font-weight:600;cursor:pointer;transition:.15s">
+                            {{ lbl }}{% if h == 24 %} <i class="fas fa-triangle-exclamation" style="color:#f59e0b;font-size:9px"></i>{% endif %}
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div>
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Src IP</div>
+                    <input id="f_src_ip" type="text" placeholder="10.0.0.1" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;width:120px;outline:none">
+                </div>
+                <div>
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Dst IP</div>
+                    <input id="f_dst_ip" type="text" placeholder="8.8.8.8" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;width:120px;outline:none">
+                </div>
+                <div id="port_col">
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Dst Port</div>
+                    <input id="f_dst_port" type="number" placeholder="443" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;width:80px;outline:none">
+                </div>
+                <div id="action_col">
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Action</div>
+                    <select id="f_action" style="padding:4px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;outline:none;background:#fff">
+                        <option value="">Any</option>
+                        <option value="allow">Allow</option>
+                        <option value="deny">Deny</option>
+                        <option value="drop">Drop</option>
+                    </select>
+                </div>
+
+                <button onclick="doFetch()" id="btnFetch"
+                        style="padding:5px 16px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;align-self:flex-end;transition:.15s"
+                        onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                    <i class="fas fa-cloud-download-alt"></i> Fetch from NGFW
+                </button>
+            </div>
+
+            {# Cache status bar #}
+            <div id="statusBar" style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap">
+                <span id="statusText" style="font-size:12px;color:#64748b">
+                    <i class="fas fa-info-circle me-1" style="color:#94a3b8"></i>No data cached for this log type.
+                </span>
+                <div style="display:flex;gap:6px;margin-left:auto">
+                    <button onclick="applyBrowseFilters()" id="btnSearch"
+                            style="padding:3px 10px;border-radius:6px;border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;font-size:11px;font-weight:600;cursor:pointer">
+                        <i class="fas fa-filter me-1"></i>Search in Cache
+                    </button>
+                    <button onclick="exportCSV()"
+                            style="padding:3px 10px;border-radius:6px;border:1px solid #a7f3d0;background:#f0fdf4;color:#065f46;font-size:11px;font-weight:600;cursor:pointer">
+                        <i class="fas fa-file-csv me-1"></i>Export CSV
+                    </button>
+                    <button onclick="clearCache()" id="btnClear"
+                            style="padding:3px 10px;border-radius:6px;border:1px solid #fca5a5;background:#fff1f2;color:#991b1b;font-size:11px;font-weight:600;cursor:pointer">
+                        <i class="fas fa-trash me-1"></i>Clear Cache
+                    </button>
+                </div>
+            </div>
+
+            {# Browse-level time filter (applied to cache) #}
+            <div id="browseTimeRow" style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+                <span style="font-size:11px;font-weight:600;color:#64748b">Filter in cache:</span>
+                <div>
+                    <span style="font-size:10px;color:#94a3b8;margin-right:3px">From</span>
+                    <input id="f_time_from" type="datetime-local" style="padding:3px 6px;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;outline:none">
+                </div>
+                <div>
+                    <span style="font-size:10px;color:#94a3b8;margin-right:3px">To</span>
+                    <input id="f_time_to" type="datetime-local" style="padding:3px 6px;border:1px solid #e2e8f0;border-radius:5px;font-size:11px;outline:none">
+                </div>
+                <button onclick="applyBrowseFilters()"
+                        style="padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;font-size:11px;font-weight:600;cursor:pointer">Apply</button>
+                <button onclick="resetBrowseFilters()"
+                        style="padding:3px 8px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;font-size:11px;color:#64748b;cursor:pointer">Reset</button>
+            </div>
+        </div>
+
+        {# ---- Table area ---- #}
+        <div style="flex:1;overflow:auto">
+            <table class="rules-table" id="logTable">
+                <thead id="logHead"><tr id="logHeaderRow"></tr></thead>
+                <tbody id="logBody">
+                    <tr><td colspan="12" style="text-align:center;padding:48px;color:#94a3b8;font-size:13px">
+                        <i class="fas fa-cloud-download-alt me-2" style="font-size:20px;display:block;margin-bottom:8px"></i>
+                        Use "Fetch from NGFW" to load logs into cache
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        {# ---- Load more bar ---- #}
+        <div id="loadMoreBar" style="display:none;padding:10px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:12px">
+            <span id="loadMoreInfo" style="font-size:12px;color:#64748b"></span>
+            <button onclick="loadMore()" id="btnLoadMore"
+                    style="padding:4px 14px;border-radius:6px;border:1px solid #e2e8f0;background:#fff;font-size:12px;font-weight:600;cursor:pointer">
+                <i class="fas fa-chevron-down me-1"></i>Load More (100)
+            </button>
+        </div>
+
+    </div>{# /app-main #}
+</div>{# /app-layout #}
+
+
+{# ===== RAW LOG MODAL ===== #}
+<div id="rawModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.65);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center"
+     onclick="if(event.target===this) closeRaw()">
+    <div style="background:#0f172a;border-radius:12px;width:90%;max-width:800px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.5)">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #1e293b">
+            <span style="color:#60a5fa;font-size:13px;font-weight:700"><i class="fas fa-code me-2"></i>Raw Log Entry</span>
+            <button onclick="closeRaw()" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px">×</button>
+        </div>
+        <div style="overflow:auto;padding:16px;flex:1">
+            <pre id="rawContent" style="color:#94a3b8;font-size:12px;margin:0;white-space:pre-wrap;word-break:break-all;font-family:monospace"></pre>
+        </div>
+    </div>
+</div>
+
+
+<style>
+.log-tab          { background:#f1f5f9;color:#64748b; }
+.log-tab-active   { background:#3b82f6;color:#fff; }
+.log-tab:hover:not(.log-tab-active) { background:#e2e8f0; }
+
+.period-btn    { background:#fff;color:#374151; }
+.period-active { background:#3b82f6 !important;color:#fff !important;border-color:#3b82f6 !important; }
+
+.a-allow  { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534; }
+.a-deny   { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b; }
+.a-drop   { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e; }
+.a-other  { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#e0e7ff;color:#3730a3; }
+
+.sev-critical { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#fee2e2;color:#991b1b; }
+.sev-high     { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#fed7aa;color:#92400e; }
+.sev-medium   { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#fef3c7;color:#92400e; }
+.sev-low      { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#dcfce7;color:#166534; }
+.sev-other    { display:inline-block;padding:1px 7px;border-radius:20px;font-size:10px;font-weight:700;background:#f1f5f9;color:#64748b; }
+
+#rawModal[style*="none"] { display:none !important; }
+</style>
+
+
+<script src="/static/js/picker.js"></script>
+<script>
+const DEVICE_ID  = '{{ selected_device_id or "global" }}';
+const LOG_TTL_H  = {{ log_ttl_hours }};
+
+let _logType  = 'traffic';
+let _period   = 1;
+let _offset   = 0;
+let _total    = 0;
+let _items    = [];
+const PAGE    = 100;
+
+// ---- Column definitions (field names from SearchTrafficLogs / SearchIPSLogs etc.) ----
+const COLS = {
+    traffic: [
+        {h:'Time',       f:['entryGeneration','entryReceived','sessionStart']},
+        {h:'Context',    f:['contextName','deviceName']},
+        {h:'Src IP',     f:['srcAddr']},
+        {h:'Src Port',   f:['srcPort']},
+        {h:'Dst IP',     f:['dstAddr']},
+        {h:'Dst Port',   f:['dstPort']},
+        {h:'Proto',      f:['ipProtocol'], fmt:'proto'},
+        {h:'App',        f:['app']},
+        {h:'Action',     f:['action'], fmt:'action'},
+        {h:'Rule',       f:['securityRuleName']},
+        {h:'Sent',       f:['bytesSent'], fmt:'bytes'},
+        {h:'Recv',       f:['bytesReceived'], fmt:'bytes'},
+    ],
+    ips: [
+        {h:'Time',       f:['entryGeneration','entryReceived']},
+        {h:'Context',    f:['contextName','deviceName']},
+        {h:'Src IP',     f:['srcAddr']},
+        {h:'Src Port',   f:['srcPort']},
+        {h:'Dst IP',     f:['dstAddr']},
+        {h:'Dst Port',   f:['dstPort']},
+        {h:'Threat',     f:['threatName']},
+        {h:'Severity',   f:['threatSeverity'], fmt:'severity'},
+        {h:'Action',     f:['action'], fmt:'action'},
+        {h:'Proto',      f:['ipProtocol'], fmt:'proto'},
+    ],
+    av: [
+        {h:'Time',       f:['entryGeneration','entryReceived']},
+        {h:'Context',    f:['contextName','deviceName']},
+        {h:'Src IP',     f:['srcAddr']},
+        {h:'Dst IP',     f:['dstAddr']},
+        {h:'Threat',     f:['threatName']},
+        {h:'File',       f:['fileName']},
+        {h:'Action',     f:['action'], fmt:'action'},
+    ],
+    audit: [
+        {h:'Time',       f:['generateTime']},
+        {h:'Admin',      f:['adminDisplayName','adminLogin']},
+        {h:'Action',     f:['action']},
+        {h:'Source IP',  f:['sourceAddress']},
+        {h:'Args',       f:['queryArgs']},
+        {h:'Result',     f:['result'], fmt:'result'},
+    ],
+};
+
+// ---- Tab & period management ----
+function setTab(t) {
+    _logType = t;
+    _offset = 0; _total = 0; _items = [];
+    document.querySelectorAll('.log-tab').forEach(b => b.classList.remove('log-tab-active'));
+    document.getElementById('tab_' + t).classList.add('log-tab-active');
+    const url = new URL(window.location);
+    url.searchParams.set('tab', t);
+    history.replaceState(null, '', url);
+
+    // Show/hide port & action cols (not for audit)
+    document.getElementById('port_col').style.display   = t === 'audit' ? 'none' : '';
+    document.getElementById('action_col').style.display = t === 'audit' ? 'none' : '';
+
+    _rebuildHeader();
+    _renderEmpty('Use "Fetch from NGFW" to load logs into cache');
+    loadStatus();
+}
+
+function _toLocalInput(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function setFetchPeriod(h) {
+    _period = h;
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('period-active'));
+    document.getElementById('period_' + h).classList.add('period-active');
+    const now  = new Date();
+    const from = new Date(now.getTime() - h * 3600 * 1000);
+    document.getElementById('fetch_to').value   = _toLocalInput(now);
+    document.getElementById('fetch_from').value = _toLocalInput(from);
+}
+
+
+function _rebuildHeader() {
+    const cols = COLS[_logType] || [];
+    document.getElementById('logHeaderRow').innerHTML =
+        cols.map(c => `<th>${c.h}</th>`).join('') + '<th></th>';
+}
+
+// ---- Status ----
+async function loadStatus() {
+    try {
+        const r = await fetch(`/api/v1/logs/status?device_group_id=${encodeURIComponent(DEVICE_ID)}`);
+        const d = await r.json();
+        if (d.status !== 'ok') return;
+        const s = d.types[_logType] || {};
+        _renderStatus(s);
+    } catch (e) { /* ignore */ }
+}
+
+function _renderStatus(s) {
+    const bar = document.getElementById('statusText');
+    if (!s.count) {
+        bar.innerHTML = '<i class="fas fa-info-circle me-1" style="color:#94a3b8"></i>No data cached for this log type.';
+        return;
+    }
+    const ago    = _timeAgo(s.fetched_at);
+    const purge  = _purgeLabel(s.purge_in_sec);
+    const oldest = s.oldest_event ? _fmtTime(s.oldest_event) : '?';
+    const newest = s.newest_event ? _fmtTime(s.newest_event) : '?';
+    bar.innerHTML = `<i class="fas fa-database me-1" style="color:#3b82f6"></i>
+        <strong>${s.count.toLocaleString()}</strong> events &nbsp;|&nbsp;
+        <span style="color:#94a3b8">${oldest} → ${newest}</span> &nbsp;|&nbsp;
+        Fetched ${ago} &nbsp;|&nbsp;
+        <span style="color:${s.purge_in_sec < 300 ? '#ef4444' : '#64748b'}">Auto-purge ${purge}</span>`;
+}
+
+function _timeAgo(iso) {
+    if (!iso) return '?';
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60)   return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+    return `${Math.floor(diff/3600)}h ago`;
+}
+
+function _purgeLabel(sec) {
+    if (sec === null || sec === undefined) return '?';
+    if (sec <= 0) return 'soon';
+    if (sec < 60) return `in ${sec}s`;
+    if (sec < 3600) return `in ${Math.floor(sec/60)}m`;
+    return `in ${Math.floor(sec/3600)}h`;
+}
+
+// ---- Fetch from NGFW ----
+async function doFetch() {
+    const fromUtc = _toUTC(document.getElementById('fetch_from').value);
+    const toUtc   = _toUTC(document.getElementById('fetch_to').value);
+
+    if (!fromUtc || !toUtc) {
+        showToast('Укажите период выгрузки (From / To)', 'warning');
+        return;
+    }
+
+    const hourSpan = (new Date(toUtc) - new Date(fromUtc)) / 3_600_000;
+    if (hourSpan <= 0) {
+        showToast('"From" должно быть раньше "To"', 'warning');
+        return;
+    }
+
+    let confirmed = false;
+    if (hourSpan > 6) {
+        const ok = await confirmDialog(
+            'Большой диапазон',
+            `Выгрузка ${Math.round(hourSpan)}ч логов может занять время и вернуть много записей. Продолжить?`,
+            'Выгрузить', true
+        );
+        if (!ok) return;
+        confirmed = true;
+    }
+
+    showLoading(`Выгрузка ${Math.round(hourSpan)}ч логов (${_logType}) из NGFW…`);
+    try {
+        const body = {
+            device_group_id: DEVICE_ID,
+            log_type:        _logType,
+            time_from:       fromUtc,
+            time_to:         toUtc,
+            confirmed_24h:   confirmed,
+            src_ip:   document.getElementById('f_src_ip').value.trim()   || null,
+            dst_ip:   document.getElementById('f_dst_ip').value.trim()   || null,
+            dst_port: parseInt(document.getElementById('f_dst_port').value) || null,
+            action:   document.getElementById('f_action').value           || null,
+        };
+        const r = await fetch('/api/v1/logs/fetch', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (d.status === 'ok') {
+            showToast(`Fetched and cached ${d.stored.toLocaleString()} events`, 'success');
+            _offset = 0; _total = 0; _items = [];
+            await loadStatus();
+            await applyBrowseFilters();
+        } else if (d.status === 'warn_24h') {
+            showToast('Confirm 24h fetch in the dialog', 'warning');
+        } else {
+            showToast(d.message || 'Fetch failed', 'error');
+        }
+    } catch (e) {
+        showToast(e.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// ---- Browse cache ----
+async function applyBrowseFilters() {
+    _offset = 0; _total = 0; _items = [];
+    await _loadPage(false);
+}
+
+async function loadMore() {
+    await _loadPage(true);
+}
+
+async function _loadPage(append) {
+    if (!append) {
+        document.getElementById('logBody').innerHTML =
+            '<tr><td colspan="20" style="text-align:center;padding:32px;color:#94a3b8;font-size:12px"><i class="fas fa-spinner fa-spin me-2"></i>Loading…</td></tr>';
+    }
+    try {
+        const body = {
+            device_group_id: DEVICE_ID,
+            log_type:  _logType,
+            limit:     PAGE,
+            offset:    _offset,
+            src_ip:    document.getElementById('f_src_ip').value.trim()   || null,
+            dst_ip:    document.getElementById('f_dst_ip').value.trim()   || null,
+            dst_port:  parseInt(document.getElementById('f_dst_port').value) || null,
+            action:    document.getElementById('f_action').value           || null,
+            time_from: _toUTC(document.getElementById('f_time_from').value),
+            time_to:   _toUTC(document.getElementById('f_time_to').value),
+        };
+        const r  = await fetch('/api/v1/logs/query', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(body),
+        });
+        const d = await r.json();
+        if (d.status !== 'ok') throw new Error(d.message || 'Query failed');
+
+        const newItems = d.items || [];
+        _total = d.total || newItems.length;
+        _items = append ? [..._items, ...newItems] : newItems;
+        _offset += newItems.length;
+
+        _renderStatus({
+            count:        d.cache_count,
+            fetched_at:   d.fetched_at,
+            purge_in_sec: d.purge_in_sec,
+            oldest_event: d.oldest_event,
+            newest_event: d.newest_event,
+        });
+        _renderTable();
+        _renderLoadMore();
+    } catch (e) {
+        _renderEmpty(`Error: ${e.message}`);
+    }
+}
+
+function resetBrowseFilters() {
+    document.getElementById('f_time_from').value = '';
+    document.getElementById('f_time_to').value   = '';
+    applyBrowseFilters();
+}
+
+// ---- Rendering ----
+function _renderEmpty(msg) {
+    document.getElementById('logBody').innerHTML =
+        `<tr><td colspan="20" style="text-align:center;padding:48px;color:#94a3b8;font-size:13px">${_esc(msg)}</td></tr>`;
+    document.getElementById('loadMoreBar').style.display = 'none';
+}
+
+function _g(row, ...keys) {
+    for (const k of keys) {
+        const v = row[k];
+        if (v !== undefined && v !== null && v !== '') return v;
+    }
+    return null;
+}
+
+// Convert datetime-local (local time) to UTC ISO string for backend comparison
+function _toUTC(localDt) {
+    if (!localDt) return null;
+    const d = new Date(localDt);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function _fmtTime(val) {
+    if (!val) return '—';
+    try {
+        const d = new Date(val);
+        if (isNaN(d)) return String(val);
+        return d.toLocaleString('ru-RU', {
+            day:'2-digit',month:'2-digit',year:'numeric',
+            hour:'2-digit',minute:'2-digit',second:'2-digit',
+        });
+    } catch { return String(val); }
+}
+
+function _fmtCell(val, fmt) {
+    if (val === null || val === undefined) return '<span style="color:#94a3b8">—</span>';
+    const s = String(val);
+    if (fmt === 'action') {
+        const a = s.toLowerCase();
+        const cls = a.includes('allow') ? 'a-allow' : a.includes('deny') ? 'a-deny' : a.includes('drop') ? 'a-drop' : 'a-other';
+        const lbl = a.includes('allow') ? 'Allow' : a.includes('deny') ? 'Deny' : a.includes('drop') ? 'Drop' : s;
+        return `<span class="${cls}">${_esc(lbl)}</span>`;
+    }
+    if (fmt === 'severity') {
+        const a = s.toLowerCase();
+        const cls = a.includes('crit') ? 'sev-critical' : a.includes('high') ? 'sev-high' : a.includes('med') ? 'sev-medium' : a.includes('low') ? 'sev-low' : 'sev-other';
+        return `<span class="${cls}">${_esc(s)}</span>`;
+    }
+    if (fmt === 'result') {
+        const ok = s.toLowerCase().includes('ok') || s.toLowerCase().includes('success');
+        return `<span class="${ok ? 'a-allow' : 'a-deny'}">${_esc(s)}</span>`;
+    }
+    if (fmt === 'proto') {
+        const map = {'1':'ICMP','6':'TCP','17':'UDP','47':'GRE','50':'ESP','51':'AH'};
+        return _esc(map[s] || s);
+    }
+    if (fmt === 'bytes') {
+        const n = parseFloat(s);
+        if (isNaN(n)) return _esc(s);
+        if (n < 1024) return n + ' B';
+        if (n < 1048576) return (n/1024).toFixed(1) + ' KB';
+        return (n/1048576).toFixed(1) + ' MB';
+    }
+    return _esc(s);
+}
+
+function _renderTable() {
+    const cols = COLS[_logType] || [];
+    if (!_items.length) {
+        _renderEmpty('No events match the current filters');
+        return;
+    }
+    const tbody = document.getElementById('logBody');
+    const html = _items.map((row, i) => {
+        const cells = cols.map(c => {
+            const rawVal = _g(row, ...c.f);
+            const isTime = c.h === 'Time';
+            const val    = isTime ? _fmtTime(rawVal) : (rawVal !== null ? rawVal : null);
+            return `<td style="font-size:11px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis">
+                ${isTime ? `<span style="color:#64748b">${val || '—'}</span>` : _fmtCell(val, c.fmt)}
+            </td>`;
+        }).join('');
+        return `<tr class="rule-row" onclick="openRaw(${i})" style="cursor:pointer">
+            ${cells}
+            <td style="width:28px;text-align:center;color:#94a3b8;font-size:10px"><i class="fas fa-expand-alt"></i></td>
+        </tr>`;
+    }).join('');
+    tbody.innerHTML = html;
+}
+
+function _renderLoadMore() {
+    const bar = document.getElementById('loadMoreBar');
+    if (_items.length < _total) {
+        bar.style.display = 'flex';
+        document.getElementById('loadMoreInfo').textContent = `Showing ${_items.length.toLocaleString()} of ${_total.toLocaleString()} cached events`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+// ---- Raw log modal ----
+function openRaw(idx) {
+    const row = _items[idx];
+    document.getElementById('rawContent').textContent = JSON.stringify(row, null, 2);
+    document.getElementById('rawModal').style.display = 'flex';
+}
+function closeRaw() {
+    document.getElementById('rawModal').style.display = 'none';
+}
+
+// ---- Export CSV (server-side) ----
+function exportCSV() {
+    const params = new URLSearchParams({
+        device_group_id: DEVICE_ID,
+        log_type:        _logType,
+    });
+    const srcIp   = document.getElementById('f_src_ip').value.trim();
+    const dstIp   = document.getElementById('f_dst_ip').value.trim();
+    const dstPort = document.getElementById('f_dst_port').value;
+    const action  = document.getElementById('f_action').value;
+    const tf      = _toUTC(document.getElementById('f_time_from').value);
+    const tt      = _toUTC(document.getElementById('f_time_to').value);
+    if (srcIp)   params.set('src_ip',   srcIp);
+    if (dstIp)   params.set('dst_ip',   dstIp);
+    if (dstPort) params.set('dst_port', dstPort);
+    if (action)  params.set('action',   action);
+    if (tf)      params.set('time_from', tf);
+    if (tt)      params.set('time_to',   tt);
+    window.location.href = `/api/v1/logs/export?${params.toString()}`;
+}
+
+// ---- Clear cache ----
+async function clearCache() {
+    if (!await confirmDialog('Clear cache', `Delete all cached ${_logType} logs for this device?`, 'Clear', true)) return;
+    showLoading('Clearing cache…');
+    try {
+        const r = await fetch('/api/v1/logs/clear', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ device_group_id: DEVICE_ID, log_type: _logType }),
+        });
+        const d = await r.json();
+        if (d.status === 'ok') {
+            showToast(`Cleared ${d.deleted} cached entries`, 'success');
+            _offset = 0; _total = 0; _items = [];
+            loadStatus();
+            _renderEmpty('Cache cleared. Use "Fetch from NGFW" to load new data.');
+        } else {
+            showToast(d.message || 'Failed', 'error');
+        }
+    } catch (e) {
+        showToast(e.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// ---- Utils ----
+function _esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---- Init ----
+document.addEventListener('DOMContentLoaded', () => {
+    _rebuildHeader();
+    setFetchPeriod(1);  // pre-fill fetch pickers with default 1h
+    loadStatus();
+    setInterval(loadStatus, 60_000);
+});
+</script>
+{% endblock %}

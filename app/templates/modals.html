@@ -1,0 +1,64 @@
+<div class="modal fade" id="bulkMoveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Move Rules to Folder</h5>
+                <button class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">Select Target Folder:</label>
+                <select id="bmFolderSelect" class="form-select">
+                    </select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="submitBulkMove()">Move Rules</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="syncLoginModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Connect to NGFW</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3"><label class="fw-bold">Host</label><input type="text" id="syncHost" class="form-control" placeholder="192.168.1.1"></div>
+                <div class="mb-3"><label class="fw-bold">User</label><input type="text" id="syncUser" class="form-control" placeholder="admin"></div>
+                <div class="mb-3"><label class="fw-bold">Password</label><input type="password" id="syncPass" class="form-control"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-primary w-100" onclick="performSync()">Start Sync</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="loadingModal" data-bs-backdrop="static"><div class="modal-dialog modal-dialog-centered"><div class="modal-content text-center p-4"><div class="spinner-border text-primary mb-3"></div><h5>Processing...</h5></div></div></div>
+<div class="modal fade" id="createFolderModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">New Folder</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" id="cfGid"><input type="text" id="cfName" class="form-control mb-3" placeholder="Name"><select id="cfSec" class="form-select"><option value="pre">Pre</option><option value="post">Post</option></select></div><div class="modal-footer"><button class="btn btn-primary" onclick="doCreateFolder()">Create</button></div></div></div></div>
+<div class="modal fade" id="transferModal"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Transfer</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><select id="trDevice" class="form-select mb-3" onchange="filterTransferFolders()"><option>Select Device</option></select><select id="trFolder" class="form-select mb-3" disabled><option>Select Folder</option></select><div class="d-flex gap-2"><button class="btn btn-primary flex-grow-1" onclick="commitTransfer('copy')">Copy</button><button class="btn btn-outline-danger flex-grow-1" onclick="commitTransfer('move')">Move</button></div></div></div></div></div>
+
+<div class="modal fade" id="createRuleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Rule Editor</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="crFolderId"><input type="hidden" id="crRuleId"> 
+                <div class="mb-3"><label class="fw-bold">Name</label><input type="text" class="form-control" id="crName"></div>
+                <div class="row">
+                    <div class="col-md-6 mb-3"><label class="small fw-bold text-muted">SOURCE</label><input type="text" class="form-control form-control-sm mb-2" id="crSrcZone" list="list-zones" placeholder="Zone"><input type="text" class="form-control form-control-sm" id="crSrcNet" list="list-nets" placeholder="IP"></div>
+                    <div class="col-md-6 mb-3"><label class="small fw-bold text-muted">DESTINATION</label><input type="text" class="form-control form-control-sm mb-2" id="crDstZone" list="list-zones" placeholder="Zone"><input type="text" class="form-control form-control-sm" id="crDstNet" list="list-nets" placeholder="IP"></div>
+                </div>
+                <div class="row">
+                    <div class="col-md-8"><label class="fw-bold">Service</label><input type="text" class="form-control" id="crService" list="list-services"></div>
+                    <div class="col-md-4"><label class="fw-bold">Action</label><select class="form-select" id="crAction"><option value="ALLOW">Allow</option><option value="DENY">Deny</option></select></div>
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-primary" onclick="submitCreateRule()">Save Rule</button></div>
+        </div>
+    </div>
+</div>
+
+<datalist id="list-zones">{% for z in available_zones %}<option value="{{ z }}">{% endfor %}</datalist>
+<datalist id="list-nets">{% for n in available_nets %}<option value="{{ n }}">{% endfor %}</datalist>
+<datalist id="list-services">{% for s in available_services %}<option value="{{ s }}">{% endfor %}</datalist>

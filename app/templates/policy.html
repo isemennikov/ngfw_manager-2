@@ -1,0 +1,709 @@
+{% extends "base.html" %}
+{% block title %}Policy Rules — NGFW Manager{% endblock %}
+
+{% block body %}
+<div class="app-layout">
+
+    {# ===== SIDEBAR ===== #}
+    <aside class="app-sidebar">
+        <div class="sidebar-brand">
+            <div style="width:32px;height:32px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-right:10px;flex-shrink:0">
+                <i class="fas fa-shield-halved" style="color:#fff;font-size:15px"></i>
+            </div>
+            <div>
+                <div class="sidebar-brand-text">NGFW Manager</div>
+                <span class="sidebar-brand-sub">Policy Rules</span>
+            </div>
+        </div>
+
+        {# Nav tabs #}
+        <div style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.06)">
+            <a href="/" style="flex:1;min-width:44px;text-align:center;padding:5px 4px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;background:rgba(255,255,255,.06);color:#94a3b8"
+               onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+                <i class="fas fa-layer-group me-1" style="font-size:10px"></i>SEC
+            </a>
+            <a href="/nat" style="flex:1;min-width:44px;text-align:center;padding:5px 4px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;background:rgba(255,255,255,.06);color:#94a3b8"
+               onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+                <i class="fas fa-arrows-left-right me-1" style="font-size:10px"></i>NAT
+            </a>
+            <a href="/objects" style="flex:1;min-width:44px;text-align:center;padding:5px 4px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;background:rgba(255,255,255,.06);color:#94a3b8"
+               onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+                <i class="fas fa-cubes me-1" style="font-size:10px"></i>OBJ
+            </a>
+            <a href="/logs" style="flex:1;min-width:44px;text-align:center;padding:5px 4px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;background:rgba(255,255,255,.06);color:#94a3b8"
+               onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+                <i class="fas fa-list-alt me-1" style="font-size:10px"></i>LOG
+            </a>
+            <a href="/policy" style="flex:1;min-width:36px;text-align:center;padding:5px 2px;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;background:rgba(59,130,246,.25);color:#60a5fa">
+                <i class="fas fa-shield-virus" style="font-size:10px;display:block;margin-bottom:1px"></i>POL
+            </a>
+            <a href="/system" style="flex:1;min-width:36px;text-align:center;padding:5px 2px;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;background:rgba(255,255,255,.06);color:#94a3b8"
+               onmouseover="this.style.background='rgba(255,255,255,.1)'" onmouseout="this.style.background='rgba(255,255,255,.06)'">
+                <i class="fas fa-server" style="font-size:10px;display:block;margin-bottom:1px"></i>SYS
+            </a>
+        </div>
+
+        {# Device list #}
+        <div class="sidebar-scroll">
+            <div class="sidebar-section-label">Device</div>
+            {% for dev in devices %}
+            <a href="/policy?device_id={{ dev.device_id }}&tab={{ active_tab }}"
+               class="folder-link {{ 'active' if dev.device_id == selected_device_id else '' }}">
+                <i class="fas fa-network-wired" style="font-size:11px;flex-shrink:0"></i>
+                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ dev.name }}">{{ dev.name }}</span>
+            </a>
+            {% else %}
+            <div style="padding:16px;font-size:12px;color:#475569;text-align:center">No devices synced</div>
+            {% endfor %}
+        </div>
+
+        <div class="sidebar-footer">
+            <div style="width:30px;height:30px;background:#1e293b;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <i class="fas fa-user" style="color:#64748b;font-size:12px"></i>
+            </div>
+            <div class="sidebar-user">
+                <div class="sidebar-user-name">{{ user.username }}</div>
+                <div class="sidebar-user-host">{{ user.host }}</div>
+            </div>
+            <a href="/logout" title="Logout" style="color:#475569;text-decoration:none;padding:4px 6px;border-radius:6px;transition:.15s"
+               onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#475569'">
+                <i class="fas fa-power-off"></i>
+            </a>
+        </div>
+    </aside>
+
+    {# ===== MAIN ===== #}
+    <div class="app-main">
+
+        {# Topbar #}
+        <div class="app-topbar">
+            <span class="topbar-title">
+                <i class="fas fa-shield-virus" style="color:#3b82f6;margin-right:6px"></i>
+                Policy Rules
+            </span>
+            <div class="topbar-sep"></div>
+
+            {# Rule type tabs #}
+            <div style="display:flex;gap:4px">
+                {% for tid, tlbl, ticon in [('decryption','Decryption','fa-lock'),('auth','Authentication','fa-user-shield'),('pbr','PBR','fa-route')] %}
+                <button id="tab_{{ tid }}" onclick="setTab('{{ tid }}')"
+                        style="padding:4px 12px;border-radius:6px;border:none;font-size:11px;font-weight:600;cursor:pointer;transition:.15s"
+                        class="policy-tab {{ 'policy-tab-active' if tid == active_tab else '' }}">
+                    <i class="fas {{ ticon }} me-1"></i>{{ tlbl }}
+                </button>
+                {% endfor %}
+            </div>
+
+            <div class="topbar-sep"></div>
+
+            <button id="btnCreate" onclick="openCreate()"
+                    style="padding:5px 14px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:.15s"
+                    onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                <i class="fas fa-plus"></i> New Rule
+            </button>
+
+            <button onclick="loadRules()"
+                    style="padding:5px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff;color:#374151;font-size:12px;font-weight:600;cursor:pointer;transition:.15s"
+                    onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+
+        {# Bulk action bar #}
+        <div id="bulkBar" style="display:none;padding:8px 16px;background:#eff6ff;border-bottom:1px solid #bfdbfe;display:flex;align-items:center;gap:10px">
+            <span id="bulkCount" style="font-size:13px;font-weight:600;color:#1d4ed8"></span>
+            <button onclick="bulkDelete()"
+                    style="padding:4px 12px;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:12px;font-weight:600;cursor:pointer">
+                <i class="fas fa-trash me-1"></i>Delete
+            </button>
+            <button onclick="clearSelection()"
+                    style="padding:4px 12px;border-radius:6px;border:1px solid #93c5fd;background:#fff;color:#1d4ed8;font-size:12px;font-weight:600;cursor:pointer">
+                Cancel
+            </button>
+        </div>
+
+        {# Rules table #}
+        <div class="table-scroll" style="flex:1;overflow:auto">
+            <table class="rules-table" id="rulesTable">
+                <thead id="rulesHead">
+                    <tr>
+                        <th style="width:32px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+                        <th style="width:36px">#</th>
+                        <th>Name</th>
+                        <th>Src Zone</th>
+                        <th>Source</th>
+                        <th>Dst Zone</th>
+                        <th>Destination</th>
+                        <th>Service</th>
+                        <th id="thAction">Action</th>
+                        <th id="thExtra" style="display:none">Profile</th>
+                        <th style="width:60px">Status</th>
+                        <th style="width:80px"></th>
+                    </tr>
+                </thead>
+                <tbody id="rulesBody">
+                    <tr><td colspan="12" style="text-align:center;padding:40px;color:#94a3b8;font-size:13px">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Loading…
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>{# /app-main #}
+</div>{# /app-layout #}
+
+
+{# ===== CREATE MODAL ===== #}
+<div class="modal fade" id="createModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius:14px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.15)">
+            <div class="modal-header" style="border-bottom:1px solid #f1f5f9;padding:16px 20px">
+                <h5 class="modal-title" id="createModalTitle" style="font-weight:700;font-size:15px">New Rule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:20px">
+
+                {# Common fields #}
+                <div class="row g-3 mb-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold" style="font-size:12px">Rule Name *</label>
+                        <input type="text" id="fName" class="form-control form-control-sm" placeholder="e.g. Decrypt-Corp-HTTPS">
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" style="font-size:12px">Source Zone</label>
+                        <select id="fSrcZone" class="form-select form-select-sm" multiple style="height:90px">
+                            {% for z in zone_objects %}
+                            <option value="{{ z.id }}">{{ z.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div style="font-size:10px;color:#94a3b8;margin-top:2px">Ctrl+click for multi-select</div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" style="font-size:12px">Destination Zone</label>
+                        <select id="fDstZone" class="form-select form-select-sm" multiple style="height:90px">
+                            {% for z in zone_objects %}
+                            <option value="{{ z.id }}">{{ z.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" style="font-size:12px">Source Address</label>
+                        <div id="pkSrcAddrWrap"></div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" style="font-size:12px">Destination Address</label>
+                        <div id="pkDstAddrWrap"></div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" style="font-size:12px">Service</label>
+                        <div id="pkSvcWrap"></div>
+                    </div>
+                    <div class="col-6" id="actionCol">
+                        <label class="form-label fw-semibold" style="font-size:12px" id="actionLabel">Action</label>
+                        <select id="fAction" class="form-select form-select-sm">
+                            {# filled by JS based on active tab #}
+                        </select>
+                    </div>
+                </div>
+
+                {# Tab-specific extra fields #}
+                <div id="extraDecrypt" style="display:none">
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" style="font-size:12px">SSL Profile</label>
+                            <input type="text" id="fSslProfile" class="form-control form-control-sm" placeholder="SSL profile name">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" style="font-size:12px">Certificate Profile</label>
+                            <input type="text" id="fCertProfile" class="form-control form-control-sm" placeholder="Certificate profile name">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="extraAuth" style="display:none">
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" style="font-size:12px">Authentication Profile</label>
+                            <input type="text" id="fAuthProfile" class="form-control form-control-sm" placeholder="Auth profile name">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" style="font-size:12px">Timeout (sec)</label>
+                            <input type="number" id="fAuthTimeout" class="form-control form-control-sm" placeholder="300" min="0">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="extraPBR" style="display:none">
+                    <div class="row g-3 mb-3">
+                        <div class="col-4">
+                            <label class="form-label fw-semibold" style="font-size:12px">Nexthop IP</label>
+                            <input type="text" id="fNexthop" class="form-control form-control-sm" placeholder="10.0.0.1">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label fw-semibold" style="font-size:12px">Nexthop Interface</label>
+                            <input type="text" id="fNexthopIf" class="form-control form-control-sm" placeholder="eth0">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label fw-semibold" style="font-size:12px">Priority</label>
+                            <input type="number" id="fPriority" class="form-control form-control-sm" placeholder="100" min="1" max="65535">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="fEnabled" checked>
+                    <label class="form-check-label" style="font-size:12px;font-weight:600" for="fEnabled">Enabled</label>
+                </div>
+
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #f1f5f9;padding:12px 20px">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitCreate()" style="font-weight:600">
+                    <i class="fas fa-plus me-1"></i>Create Rule
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<style>
+.policy-tab          { background:#f1f5f9; color:#64748b; }
+.policy-tab-active   { background:#3b82f6; color:#fff; }
+.policy-tab:hover:not(.policy-tab-active) { background:#e2e8f0; }
+
+.action-badge {
+    display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+}
+.action-decrypt   { background:#dbeafe;color:#1e40af; }
+.action-nodecrypt { background:#fef3c7;color:#92400e; }
+.action-bypass    { background:#f0fdf4;color:#166534; }
+.action-allow     { background:#dcfce7;color:#166534; }
+.action-deny      { background:#fee2e2;color:#991b1b; }
+.action-forward   { background:#ede9fe;color:#5b21b6; }
+.action-drop      { background:#fee2e2;color:#991b1b; }
+.enabled-badge    { display:inline-block;width:8px;height:8px;border-radius:50%; }
+</style>
+
+
+<script src="/static/js/picker.js"></script>
+<script>
+const DEVICE_ID   = {{ selected_device_id | tojson }};
+const ACTIVE_TAB  = {{ active_tab | tojson }};
+const NET_OBJECTS = {{ net_objects | tojson }};
+const SVC_OBJECTS = {{ svc_objects | tojson }};
+
+let _currentTab = ACTIVE_TAB;
+let _rules = [];
+let _selected = new Set();
+
+// ---- Pickers ----
+let pkSrcAddr, pkDstAddr, pkSvc;
+
+function _initPickers() {
+    const wSrc = document.getElementById('pkSrcAddrWrap');
+    const wDst = document.getElementById('pkDstAddrWrap');
+    const wSvc = document.getElementById('pkSvcWrap');
+    if (!wSrc._pickerInited) {
+        pkSrcAddr = new ObjectPicker(wSrc, { items: NET_OBJECTS, placeholder: 'Source address…' });
+        pkDstAddr = new ObjectPicker(wDst, { items: NET_OBJECTS, placeholder: 'Destination address…' });
+        pkSvc     = new ObjectPicker(wSvc, { items: SVC_OBJECTS, placeholder: 'Service…', tagClass: 'svc-t' });
+        wSrc._pickerInited = true;
+    }
+}
+
+// ---- Tab management ----
+const TAB_CONFIG = {
+    decryption: {
+        label: 'Decryption Rule',
+        actions: [
+            { value: 'DECRYPT',    label: 'Decrypt' },
+            { value: 'NO_DECRYPT', label: 'No Decrypt' },
+            { value: 'BYPASS',     label: 'Bypass' },
+        ],
+        extraFields: 'extraDecrypt',
+        extraCol: 'SSL Profile',
+        columns: ['#', 'Name', 'Src Zone', 'Source', 'Dst Zone', 'Destination', 'Service', 'Action', 'Profile', 'Status', ''],
+    },
+    auth: {
+        label: 'Authentication Rule',
+        actions: [
+            { value: 'ALLOW', label: 'Allow' },
+            { value: 'DENY',  label: 'Deny' },
+        ],
+        extraFields: 'extraAuth',
+        extraCol: 'Auth Profile',
+        columns: ['#', 'Name', 'Src Zone', 'Source', 'Dst Zone', 'Destination', 'Service', 'Action', 'Auth Profile', 'Status', ''],
+    },
+    pbr: {
+        label: 'PBR Rule',
+        actions: [
+            { value: 'FORWARD', label: 'Forward' },
+            { value: 'DROP',    label: 'Drop' },
+        ],
+        extraFields: 'extraPBR',
+        extraCol: 'Nexthop',
+        columns: ['#', 'Name', 'Src Zone', 'Source', 'Dst Zone', 'Destination', 'Service', 'Action', 'Nexthop', 'Status', ''],
+    },
+};
+
+function setTab(tab) {
+    _currentTab = tab;
+    _selected.clear();
+    _updateBulkBar();
+
+    // Update tab buttons
+    document.querySelectorAll('.policy-tab').forEach(b => {
+        b.classList.remove('policy-tab-active');
+        b.style.color = '';
+    });
+    const btn = document.getElementById('tab_' + tab);
+    if (btn) btn.classList.add('policy-tab-active');
+
+    // Update table header
+    _rebuildHeader();
+
+    // Update URL without reload
+    const url = new URL(window.location);
+    url.searchParams.set('tab', tab);
+    history.replaceState(null, '', url);
+
+    loadRules();
+}
+
+function _rebuildHeader() {
+    const cfg = TAB_CONFIG[_currentTab];
+    const th = document.getElementById('thExtra');
+    th.textContent = cfg.extraCol;
+    th.style.display = '';
+    document.getElementById('thAction').textContent = 'Action';
+}
+
+// ---- Data loading ----
+async function loadRules() {
+    document.getElementById('rulesBody').innerHTML =
+        '<tr><td colspan="12" style="text-align:center;padding:40px;color:#94a3b8;font-size:13px"><i class="fas fa-spinner fa-spin me-2"></i>Loading…</td></tr>';
+
+    try {
+        const r = await fetch('/api/v1/policy/list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_group_id: DEVICE_ID, tab: _currentTab }),
+        });
+        const data = await r.json();
+        if (data.status !== 'ok') throw new Error(data.message || 'Failed');
+        _rules = data.rules || [];
+        _renderTable();
+    } catch (e) {
+        document.getElementById('rulesBody').innerHTML =
+            `<tr><td colspan="12" style="text-align:center;padding:40px;color:#ef4444;font-size:13px"><i class="fas fa-exclamation-circle me-2"></i>${e.message}</td></tr>`;
+    }
+}
+
+// ---- Rendering ----
+function _g(row, ...keys) {
+    for (const k of keys) {
+        const v = row[k];
+        if (v !== undefined && v !== null && v !== '') return v;
+    }
+    return '—';
+}
+
+function _names(val) {
+    if (!val) return '<span style="color:#94a3b8">Any</span>';
+    if (Array.isArray(val)) {
+        if (val.length === 0) return '<span style="color:#94a3b8">Any</span>';
+        return val.map(v => {
+            const s = typeof v === 'object' ? (v.name || v.id || JSON.stringify(v)) : String(v);
+            return `<span class="tag-pill">${_esc(s)}</span>`;
+        }).join(' ');
+    }
+    if (typeof val === 'object') return `<span class="tag-pill">${_esc(val.name || val.id || '?')}</span>`;
+    return `<span class="tag-pill">${_esc(String(val))}</span>`;
+}
+
+function _actionBadge(action) {
+    if (!action || action === '—') return '<span style="color:#94a3b8">—</span>';
+    const a = String(action).toUpperCase();
+    const cls = {
+        DECRYPT: 'action-decrypt', NO_DECRYPT: 'action-nodecrypt', BYPASS: 'action-bypass',
+        ALLOW: 'action-allow', DENY: 'action-deny',
+        FORWARD: 'action-forward', DROP: 'action-drop',
+    }[a] || 'action-allow';
+    const lbl = { NO_DECRYPT: 'No Decrypt' }[a] || a.charAt(0) + a.slice(1).toLowerCase();
+    return `<span class="action-badge ${cls}">${lbl}</span>`;
+}
+
+function _extraCell(rule) {
+    if (_currentTab === 'decryption') {
+        const p = _g(rule, 'sslProfile', 'ssl_profile', 'profile');
+        return p !== '—' ? `<span class="tag-pill">${_esc(p)}</span>` : '<span style="color:#94a3b8">—</span>';
+    }
+    if (_currentTab === 'auth') {
+        const p = _g(rule, 'authProfile', 'auth_profile', 'authenticationProfile');
+        return p !== '—' ? `<span class="tag-pill">${_esc(p)}</span>` : '<span style="color:#94a3b8">—</span>';
+    }
+    if (_currentTab === 'pbr') {
+        const nh = _g(rule, 'nexthop', 'nextHop', 'nexthopIp');
+        const iface = _g(rule, 'nexthopInterface', 'interface', 'outInterface');
+        if (nh !== '—') return `<code style="font-size:11px">${_esc(nh)}</code>`;
+        if (iface !== '—') return `<code style="font-size:11px">${_esc(iface)}</code>`;
+        return '<span style="color:#94a3b8">—</span>';
+    }
+    return '—';
+}
+
+function _renderTable() {
+    const tbody = document.getElementById('rulesBody');
+    if (!_rules.length) {
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:48px;color:#94a3b8;font-size:13px">No rules found</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = _rules.map((rule, i) => {
+        const id = _g(rule, 'id', 'uuid');
+        const enabled = rule.enabled !== false && rule.enabled !== 'false';
+        const checked = _selected.has(id) ? 'checked' : '';
+
+        return `<tr class="rule-row ${_selected.has(id) ? 'rule-selected' : ''}" data-id="${_esc(id)}">
+            <td><input type="checkbox" class="row-cb" data-id="${_esc(id)}" onchange="toggleSelect('${_esc(id)}', this.checked)" ${checked}></td>
+            <td style="color:#94a3b8;font-size:11px;font-weight:600">${i + 1}</td>
+            <td style="font-weight:600;font-size:12px">${_esc(_g(rule, 'name'))}</td>
+            <td>${_names(_g(rule, 'sourceZone', 'srcZone', 'source_zone'))}</td>
+            <td>${_names(_g(rule, 'sourceAddress', 'srcAddress', 'source', 'sourceAddresses'))}</td>
+            <td>${_names(_g(rule, 'destinationZone', 'dstZone', 'destination_zone'))}</td>
+            <td>${_names(_g(rule, 'destinationAddress', 'dstAddress', 'destination', 'destinationAddresses'))}</td>
+            <td>${_names(_g(rule, 'service', 'services'))}</td>
+            <td>${_actionBadge(_g(rule, 'action', 'ruleAction'))}</td>
+            <td>${_extraCell(rule)}</td>
+            <td>
+                <label style="display:flex;align-items:center;gap:4px;cursor:pointer" title="${enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}">
+                    <input type="checkbox" class="toggle-cb" data-id="${_esc(id)}" ${enabled ? 'checked' : ''}
+                           onchange="toggleRule('${_esc(id)}', this.checked)" style="cursor:pointer">
+                </label>
+            </td>
+            <td style="text-align:right">
+                <button onclick="deleteOne('${_esc(id)}')" title="Delete"
+                        style="padding:3px 7px;border:none;border-radius:5px;background:#fee2e2;color:#ef4444;cursor:pointer;font-size:11px">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// ---- Selection ----
+function toggleSelect(id, checked) {
+    if (checked) _selected.add(id); else _selected.delete(id);
+    const row = document.querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+    if (row) row.classList.toggle('rule-selected', checked);
+    _updateBulkBar();
+}
+
+function toggleSelectAll(cb) {
+    _rules.forEach(r => {
+        const id = _g(r, 'id', 'uuid');
+        if (cb.checked) _selected.add(id); else _selected.delete(id);
+    });
+    document.querySelectorAll('.row-cb').forEach(c => {
+        c.checked = cb.checked;
+        const row = c.closest('tr');
+        if (row) row.classList.toggle('rule-selected', cb.checked);
+    });
+    _updateBulkBar();
+}
+
+function clearSelection() {
+    _selected.clear();
+    document.querySelectorAll('.row-cb').forEach(c => c.checked = false);
+    document.querySelectorAll('.rule-selected').forEach(r => r.classList.remove('rule-selected'));
+    document.getElementById('selectAll').checked = false;
+    _updateBulkBar();
+}
+
+function _updateBulkBar() {
+    const bar = document.getElementById('bulkBar');
+    if (_selected.size > 0) {
+        bar.style.display = 'flex';
+        document.getElementById('bulkCount').textContent = `${_selected.size} rule${_selected.size > 1 ? 's' : ''} selected`;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+// ---- Delete ----
+async function deleteOne(id) {
+    if (!await confirmDialog('Delete rule', 'This rule will be deleted on the NGFW. Are you sure?', 'Delete', true)) return;
+    await _doDelete([id]);
+}
+
+async function bulkDelete() {
+    const ids = [..._selected];
+    if (!await confirmDialog('Delete rules', `Delete ${ids.length} selected rule(s)?`, 'Delete', true)) return;
+    await _doDelete(ids);
+}
+
+async function _doDelete(ids) {
+    showLoading('Deleting…');
+    try {
+        const r = await fetch('/api/v1/policy/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_group_id: DEVICE_ID, tab: _currentTab, ids }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok' || data.status === 'partial') {
+            if (data.status === 'partial')
+                showToast(`Partially deleted — ${data.failed?.length || 0} failed`, 'warning');
+            else
+                showToast(`Deleted ${ids.length} rule(s)`, 'success');
+            clearSelection();
+            await loadRules();
+        } else {
+            showToast(data.message || 'Delete failed', 'error');
+        }
+    } catch (e) {
+        showToast(e.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// ---- Toggle enable/disable ----
+async function toggleRule(id, enabled) {
+    try {
+        const r = await fetch('/api/v1/policy/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_group_id: DEVICE_ID, tab: _currentTab, rule_id: id, enabled }),
+        });
+        const data = await r.json();
+        if (data.status !== 'ok') {
+            showToast('Toggle failed', 'error');
+            await loadRules();
+        }
+    } catch (e) {
+        showToast(e.message, 'error');
+    }
+}
+
+// ---- Create ----
+function openCreate() {
+    _initPickers();
+    const cfg = TAB_CONFIG[_currentTab];
+
+    document.getElementById('createModalTitle').textContent = `New ${cfg.label}`;
+    document.getElementById('fName').value = '';
+    document.getElementById('fEnabled').checked = true;
+    document.getElementById('fSslProfile').value = '';
+    document.getElementById('fCertProfile').value = '';
+    document.getElementById('fAuthProfile').value = '';
+    document.getElementById('fAuthTimeout').value = '';
+    document.getElementById('fNexthop').value = '';
+    document.getElementById('fNexthopIf').value = '';
+    document.getElementById('fPriority').value = '';
+    pkSrcAddr.clear(); pkDstAddr.clear(); pkSvc.clear();
+
+    // Reset zone selects
+    Array.from(document.getElementById('fSrcZone').options).forEach(o => o.selected = false);
+    Array.from(document.getElementById('fDstZone').options).forEach(o => o.selected = false);
+
+    // Show correct action options
+    const sel = document.getElementById('fAction');
+    sel.innerHTML = cfg.actions.map(a => `<option value="${a.value}">${a.label}</option>`).join('');
+
+    // Show correct extra fields
+    ['extraDecrypt', 'extraAuth', 'extraPBR'].forEach(id => {
+        document.getElementById(id).style.display = id === cfg.extraFields ? '' : 'none';
+    });
+
+    new bootstrap.Modal(document.getElementById('createModal')).show();
+}
+
+async function submitCreate() {
+    const name = document.getElementById('fName').value.trim();
+    if (!name) { showToast('Name is required', 'warning'); return; }
+
+    const srcZones = Array.from(document.getElementById('fSrcZone').selectedOptions).map(o => o.value);
+    const dstZones = Array.from(document.getElementById('fDstZone').selectedOptions).map(o => o.value);
+    const srcAddrs = pkSrcAddr.getSelectedIds();
+    const dstAddrs = pkDstAddr.getSelectedIds();
+    const services = pkSvc.getSelectedIds();
+    const action   = document.getElementById('fAction').value;
+    const enabled  = document.getElementById('fEnabled').checked;
+
+    let payload = {
+        name,
+        deviceGroupId: DEVICE_ID,
+        enabled,
+        action,
+        sourceZone:           srcZones,
+        destinationZone:      dstZones,
+        sourceAddress:        srcAddrs,
+        destinationAddress:   dstAddrs,
+        service:              services,
+    };
+
+    if (_currentTab === 'decryption') {
+        const sslProfile  = document.getElementById('fSslProfile').value.trim();
+        const certProfile = document.getElementById('fCertProfile').value.trim();
+        if (sslProfile)  payload.sslProfile  = sslProfile;
+        if (certProfile) payload.certificateProfile = certProfile;
+    } else if (_currentTab === 'auth') {
+        const authProfile = document.getElementById('fAuthProfile').value.trim();
+        const timeout     = document.getElementById('fAuthTimeout').value;
+        if (authProfile) payload.authProfile = authProfile;
+        if (timeout)     payload.timeout = parseInt(timeout);
+    } else if (_currentTab === 'pbr') {
+        const nexthop   = document.getElementById('fNexthop').value.trim();
+        const nexthopIf = document.getElementById('fNexthopIf').value.trim();
+        const priority  = document.getElementById('fPriority').value;
+        if (nexthop)   payload.nexthop   = nexthop;
+        if (nexthopIf) payload.nexthopInterface = nexthopIf;
+        if (priority)  payload.priority  = parseInt(priority);
+    }
+
+    showLoading('Creating…');
+    try {
+        const r = await fetch('/api/v1/policy/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_group_id: DEVICE_ID, tab: _currentTab, payload }),
+        });
+        const data = await r.json();
+        if (data.status === 'ok') {
+            bootstrap.Modal.getInstance(document.getElementById('createModal')).hide();
+            showToast('Rule created', 'success');
+            await loadRules();
+        } else {
+            showToast(data.message || 'Create failed', 'error');
+        }
+    } catch (e) {
+        showToast(e.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// ---- Utils ----
+function _esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---- Init ----
+document.addEventListener('DOMContentLoaded', () => {
+    _rebuildHeader();
+    loadRules();
+});
+</script>
+
+{% endblock %}
