@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  id-token: write  # Для OIDC, если нужно
 
 jobs:
   release-please:
