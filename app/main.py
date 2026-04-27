@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from app.db.session import engine, Base, async_session
 from app.web.router import router as web_router
+from app.api.v1.router import router as api_router
 from sqlalchemy import text, delete
 import asyncio
 import os
@@ -79,4 +80,5 @@ SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-random-string-12345")
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, https_only=False)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.include_router(api_router, prefix="/api/v1")
 app.include_router(web_router)
