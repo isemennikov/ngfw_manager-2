@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Bug Fixes
 
 * update release-please permissions ([6eba2dc](https://github.com/isemennikov/ngfw_manager-2/commit/6eba2dcf54b8075c281d89718767a3fe5c3cb943))
+* remove Docker Compose testing section from TESTING.md
 
 
 ### Documentation
