@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ngfw-manager"
+version = "0.1.0"  # Начальная версия, будет перезаписана setuptools-scm
+description = "Web interface for managing NGFW policies"
+authors = [{name = "Your Name"}]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "alembic",
+    "python-multipart",
+    "jinja2",
+    "aiofiles",
+    "requests",
+    "pydantic",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
+    "python-decouple"
+]
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.setuptools_scm]
+write_to = "app/_version.py"

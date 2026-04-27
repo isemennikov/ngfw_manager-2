@@ -11,3 +11,4 @@ alembic
 tenacity>=8.2.0
 itsdangerous
 aiosqlite
+setuptools-scm
