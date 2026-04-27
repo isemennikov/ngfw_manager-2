@@ -11,12 +11,12 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("main")
+logger = logging.getLogger("main")  # main app logger
 
 import app.db.models
 from app.db.models import CachedLog
 
-LOG_TTL_HOURS = 1          # auto-purge TTL
+LOG_TTL_HOURS = 1          # auto-purge TTL for cached logs
 PURGE_INTERVAL_SEC = 600   # run purge every 10 minutes
 
 
