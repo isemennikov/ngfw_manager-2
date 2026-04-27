@@ -37,7 +37,7 @@ async def test_create_folder_endpoint(async_db: AsyncSession, test_client):
     app.dependency_overrides[get_db] = override_get_db
     
     try:
-        response = test_client.post("/folders", json=payload)
+        response = test_client.post("/api/v1/rules/folders/create", json=payload)
         # Note: Adjust endpoint path based on actual API structure
         assert response.status_code in [200, 201, 404]  # 404 if endpoint doesn't exist yet
     finally:
@@ -55,7 +55,7 @@ async def test_sync_endpoint_unauthorized(test_client):
     }
     
     # This should fail without proper mocking of NGFW client
-    response = test_client.post("/rules/sync", json=payload)
+    response = test_client.post("/api/v1/rules/sync", json=payload)
     # Expect error due to mock/invalid credentials
     assert response.status_code in [400, 401, 422, 500]
 
@@ -84,7 +84,7 @@ async def test_reorder_rules_endpoint(async_db: AsyncSession, test_client):
     
     try:
         # Note: Adjust endpoint path based on actual API structure
-        response = test_client.put("/rules/reorder", json=payload)
+        response = test_client.put("/api/v1/rules/reorder", json=payload)
         # Should return 404 if endpoint not implemented yet
         assert response.status_code in [200, 404]
     finally:

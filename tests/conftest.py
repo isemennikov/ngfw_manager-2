@@ -17,25 +17,21 @@ def event_loop():
 
 
 @pytest.fixture
-async def async_db():
-    """Create in-memory test database."""
-    # Use SQLite in-memory for testing
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        echo=False,
-    )
+def async_db():
+    """Create test database."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker as sync_sessionmaker
     
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    Base.metadata.create_all(engine)
     
-    async_session_local = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    SessionLocal = sync_sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = SessionLocal()
     
-    async with async_session_local() as session:
-        yield session
+    yield session
     
-    await engine.dispose()
+    session.close()
+    engine.dispose()
 
 
 @pytest.fixture
