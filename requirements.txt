@@ -12,3 +12,6 @@ tenacity>=8.2.0
 itsdangerous
 aiosqlite
 setuptools-scm
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
