@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ngfw-manager"
-version = "0.1.0"  # Начальная версия, будет перезаписана setuptools-scm
+version = "0.1.1"  # Начальная версия, будет перезаписана setuptools-scm
 description = "Web interface for managing NGFW policies"
 authors = [{name = "Your Name"}]
 dependencies = [
